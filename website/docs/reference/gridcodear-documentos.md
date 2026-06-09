@@ -340,3 +340,13 @@ El PDF solo se considera correcto si cumple todo esto:
 Esta documentación define la forma oficial de producir documentos Grid Code con estilo unificado.
 
 A partir de aquí, cualquier nuevo documento Grid Code debe seguir esta skill como fuente única de verdad.
+
+## Referencias deprecadas
+
+Las siguientes rutas, nombres o referencias anteriores quedan deprecadas para documentos Grid Code y no deben usarse como canon operativo:
+
+- `pdf-builder` como referencia principal para Grid Code
+- `html-template-pdf-service` como nombre de enfoque Grid Code
+- cualquier guía previa que propusiera una página A4 interna dentro de otra página A4
+
+Para documentos Grid Code, la única referencia válida es `gridcodear-documentos`.
