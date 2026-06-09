@@ -1130,41 +1130,88 @@ class BasePlatformAdapter(ABC):
                 # Auto-TTS: if voice message, generate audio FIRST (before sending text)
                 # Skipped when the chat has voice mode disabled (/voice off)
                 _tts_path = None
-                if (event.message_type == MessageType.VOICE
-                        and text_content
-                        and not media_files
-                        and event.source.chat_id not in self._auto_tts_disabled_chats):
+                voice_input_forces_tts = (
+                    event.message_type in (MessageType.VOICE, MessageType.AUDIO)
+                    and event.source.platform == Platform.TELEGRAM
+                )
+                if (event.message_type in (MessageType.VOICE, MessageType.AUDIO)
+                        and (voice_input_forces_tts or event.source.chat_id not in self._auto_tts_disabled_chats)):
+                    if not text_content:
+                        logger.warning("[%s] Voice input received but text_content is empty; skipping TTS generation.", self.name)
+                    elif media_files:
+                        logger.debug("[%s] Voice input includes media; still attempting TTS reply.", self.name)
                     try:
-                        from tools.tts_tool import text_to_speech_tool, check_tts_requirements
-                        if check_tts_requirements():
-                            import json as _json
-                            speech_text = re.sub(r'[*_`#\[\]()]', '', text_content)[:4000].strip()
-                            if not speech_text:
-                                raise ValueError("Empty text after markdown cleanup")
-                            tts_result_str = await asyncio.to_thread(
-                                text_to_speech_tool, text=speech_text
-                            )
-                            tts_data = _json.loads(tts_result_str)
-                            _tts_path = tts_data.get("file_path")
+                        from tools.voice_orchestrator import orchestrate_voice
+                        import json as _json
+                        import tempfile
+
+                        speech_text = re.sub(r'[*_`#\[\]()]', '', text_content)[:4000].strip()
+                        if not speech_text:
+                            raise ValueError("Empty text after markdown cleanup")
+
+                        voice_context = {
+                            "input_channel": "voice",
+                            "voice_trigger": True,
+                            "interaction_route": "analysis",
+                            "route_reason": "voice_input_forces_tts",
+                            "session_key": getattr(event.source, "chat_id", ""),
+                            "chat_id": getattr(event.source, "chat_id", ""),
+                            "message_id": getattr(event, "message_id", ""),
+                            "platform": getattr(event.source.platform, "value", str(event.source.platform) if event.source and event.source.platform else ""),
+                        }
+
+                        tts_result_str = await asyncio.to_thread(
+                            orchestrate_voice,
+                            text=speech_text,
+                            context=voice_context,
+                            output_path=str(Path(tempfile.gettempdir()) / "hermes_voice" / f"tts_{uuid.uuid4().hex[:12]}.ogg"),
+                            platform=event.source.platform.value if event.source.platform else None,
+                            dry_run=False,
+                        )
+                        tts_data = _json.loads(tts_result_str)
+                        if tts_data.get("status") == "ok":
+                            _tts_path = tts_data.get("audio_path") or tts_data.get("file_path")
                     except Exception as tts_err:
-                        logger.warning("[%s] Auto-TTS failed: %s", self.name, tts_err)
+                        logger.warning("[%s] Voice orchestration failed: %s", self.name, tts_err)
 
                 # Play TTS audio before text (voice-first experience)
                 if _tts_path and Path(_tts_path).exists():
                     try:
-                        await self.play_tts(
+                        tts_send_result = await self.play_tts(
                             chat_id=event.source.chat_id,
                             audio_path=_tts_path,
                             metadata=_thread_metadata,
                         )
+                        if tts_send_result and getattr(tts_send_result, "success", False):
+                            logger.info(
+                                "[%s] VOICE PIPELINE OK chat_id=%s message_id=%s audio=%s",
+                                self.name,
+                                event.source.chat_id,
+                                getattr(tts_send_result, "message_id", ""),
+                                _tts_path,
+                            )
+                        else:
+                            logger.warning(
+                                "[%s] VOICE PIPELINE FAILED chat_id=%s audio=%s error=%s",
+                                self.name,
+                                event.source.chat_id,
+                                _tts_path,
+                                getattr(tts_send_result, "error", "unknown"),
+                            )
                     finally:
                         try:
                             os.remove(_tts_path)
                         except OSError:
                             pass
 
-                # Send the text portion
-                if text_content:
+                # Send the text portion unless voice input is forcing a voice-only reply.
+                send_text_reply = bool(text_content)
+                if event.source.platform == Platform.TELEGRAM and event.message_type in (MessageType.VOICE, MessageType.AUDIO):
+                    send_text_reply = False
+                elif event.message_type in (MessageType.VOICE, MessageType.AUDIO) and voice_input_forces_tts:
+                    send_text_reply = False
+
+                if send_text_reply:
                     logger.info("[%s] Sending response (%d chars) to %s", self.name, len(text_content), event.source.chat_id)
                     result = await self._send_with_retry(
                         chat_id=event.source.chat_id,
@@ -1303,15 +1350,28 @@ class BasePlatformAdapter(ABC):
                 error_type = type(e).__name__
                 error_detail = str(e)[:300] if str(e) else "no details available"
                 _thread_metadata = {"thread_id": event.source.thread_id} if event.source.thread_id else None
-                await self.send(
-                    chat_id=event.source.chat_id,
-                    content=(
-                        f"Sorry, I encountered an error ({error_type}).\n"
-                        f"{error_detail}\n"
-                        "Try again or use /reset to start a fresh session."
-                    ),
-                    metadata=_thread_metadata,
+                suppress_text_error = (
+                    event.source.platform == Platform.TELEGRAM
+                    and event.message_type in (MessageType.VOICE, MessageType.AUDIO)
                 )
+                if suppress_text_error:
+                    await self.send(
+                        chat_id=event.source.chat_id,
+                        content=(
+                            f"Sorry, I encountered an error ({error_type}).\n"
+                            f"{error_detail}\n"
+                            "Try again or use /reset to start a fresh session."
+                        ),
+                        metadata=_thread_metadata,
+                    )
+                else:
+                    logger.warning(
+                        "[%s] Suppressed text error fallback for Telegram voice/audio chat_id=%s error=%s: %s",
+                        self.name,
+                        event.source.chat_id,
+                        error_type,
+                        error_detail,
+                    )
             except Exception:
                 pass  # Last resort — don't let error reporting crash the handler
         finally:

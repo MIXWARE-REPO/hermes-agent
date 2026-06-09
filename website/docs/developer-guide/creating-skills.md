@@ -16,6 +16,21 @@ Make it a **Skill** when:
 - It doesn't need custom Python integration or API key management baked into the agent
 - Examples: arXiv search, git workflows, Docker management, PDF processing, email via CLI tools
 
+## Should it be Frontend, Service, or Backend?
+
+Use this layer model when profiling a skill:
+
+| Layer | Use when | User visibility |
+|---|---|---|
+| Frontend | The user can reasonably ask for the capability directly | Visible |
+| Service | The capability enables a frontend skill but is not the user goal itself | Hidden |
+| Backend | The capability is transport, auth, persistence, scheduling, or other plumbing | Hidden |
+
+Practical rule:
+- If the user would name it as an outcome, make it frontend.
+- If it exists so another skill can succeed, make it a service.
+- If it is only operational machinery, keep it backend.
+
 Make it a **Tool** when:
 - It requires end-to-end integration with API keys, auth flows, or multi-component configuration
 - It needs custom processing logic that must execute precisely every time

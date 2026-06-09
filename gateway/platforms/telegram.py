@@ -956,6 +956,13 @@ class TelegramAdapter(BasePlatformAdapter):
                         reply_to_message_id=int(reply_to) if reply_to else None,
                         message_thread_id=int(_voice_thread) if _voice_thread else None,
                     )
+                    logger.info(
+                        "[%s] Telegram voice sent OK (voice bubble) chat_id=%s message_id=%s path=%s",
+                        self.name,
+                        chat_id,
+                        getattr(msg, "message_id", ""),
+                        audio_path,
+                    )
                 else:
                     # .mp3 and others -> send as audio file
                     _audio_thread = metadata.get("thread_id") if metadata else None
@@ -966,15 +973,43 @@ class TelegramAdapter(BasePlatformAdapter):
                         reply_to_message_id=int(reply_to) if reply_to else None,
                         message_thread_id=int(_audio_thread) if _audio_thread else None,
                     )
+                    logger.info(
+                        "[%s] Telegram audio sent OK (audio file) chat_id=%s message_id=%s path=%s",
+                        self.name,
+                        chat_id,
+                        getattr(msg, "message_id", ""),
+                        audio_path,
+                    )
             return SendResult(success=True, message_id=str(msg.message_id))
         except Exception as e:
             logger.error(
-                "[%s] Failed to send Telegram voice/audio, falling back to base adapter: %s",
+                "[%s] Failed to send Telegram voice/audio: %s",
                 self.name,
                 e,
                 exc_info=True,
             )
-            return await super().send_voice(chat_id, audio_path, caption, reply_to)
+            # Do not fall back to text here: if voice sending fails, try a plain
+            # audio upload with fewer Telegram-specific parameters so the user
+            # still receives an audible file rather than a text-only placeholder.
+            try:
+                with open(audio_path, "rb") as audio_file:
+                    _thread = metadata.get("thread_id") if metadata else None
+                    msg = await self._bot.send_audio(
+                        chat_id=int(chat_id),
+                        audio=audio_file,
+                        caption=caption[:1024] if caption else None,
+                        reply_to_message_id=int(reply_to) if reply_to and str(reply_to).isdigit() else None,
+                        message_thread_id=int(_thread) if _thread else None,
+                    )
+                return SendResult(success=True, message_id=str(msg.message_id))
+            except Exception as fallback_err:
+                logger.error(
+                    "[%s] Telegram audio fallback also failed: %s",
+                    self.name,
+                    fallback_err,
+                    exc_info=True,
+                )
+                return SendResult(success=False, error=str(fallback_err))
     
     async def send_image_file(
         self,

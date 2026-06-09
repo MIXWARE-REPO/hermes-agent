@@ -76,8 +76,12 @@ class WebhookAdapter(BasePlatformAdapter):
         self._routes: Dict[str, dict] = dict(self._static_routes)
         self._runner = None
 
-        # Delivery info keyed by session chat_id — consumed by send()
+        # Delivery info keyed by session chat_id — reused by send() across the
+        # multiple calls an agent run produces (progress + final response), then
+        # culled by TTL so the dict doesn't leak memory.
         self._delivery_info: Dict[str, dict] = {}
+        self._delivery_info_ts: Dict[str, float] = {}
+        self._delivery_info_ttl: int = 600  # 10 min — long enough for any agent run
 
         # Reference to gateway runner for cross-platform delivery (set externally)
         self.gateway_runner = None
@@ -160,10 +164,21 @@ class WebhookAdapter(BasePlatformAdapter):
     ) -> SendResult:
         """Deliver the agent's response to the configured destination.
 
-        chat_id is ``webhook:{route}:{delivery_id}`` — we pop the delivery
-        info stored during webhook receipt so it doesn't leak memory.
+        chat_id is ``webhook:{route}:{delivery_id}``. A single agent run
+        produces multiple send() calls (progress messages + final response),
+        so we keep the delivery config across calls and cull by TTL.
         """
-        delivery = self._delivery_info.pop(chat_id, {})
+        # Cull expired entries opportunistically
+        now = time.time()
+        expired = [
+            k for k, ts in self._delivery_info_ts.items()
+            if now - ts > self._delivery_info_ttl
+        ]
+        for k in expired:
+            self._delivery_info.pop(k, None)
+            self._delivery_info_ts.pop(k, None)
+
+        delivery = self._delivery_info.get(chat_id, {})
         deliver_type = delivery.get("deliver", "log")
 
         if deliver_type == "log":
@@ -384,7 +399,32 @@ class WebhookAdapter(BasePlatformAdapter):
         # same route get independent agent runs (not queued/interrupted).
         session_chat_id = f"webhook:{route_name}:{delivery_id}"
 
-        # Store delivery info for send() — consumed (popped) on delivery
+        # Persist payload to disk if the route asks for it. The template is
+        # rendered with payload fields so cached files can be keyed by
+        # domain-specific IDs (e.g. ticket_id). Failures only log — we never
+        # block delivery on a cache write.
+        cache_file_tpl = route_config.get("cache_file")
+        if cache_file_tpl:
+            try:
+                from pathlib import Path as _Path
+                rendered = self._render_prompt(
+                    cache_file_tpl, payload, event_type, route_name
+                )
+                cache_path = _Path(rendered).expanduser()
+                cache_path.parent.mkdir(parents=True, exist_ok=True)
+                cache_path.write_text(
+                    json.dumps(payload, indent=2, ensure_ascii=False),
+                    encoding="utf-8",
+                )
+                logger.info("[webhook] Cached payload to %s", cache_path)
+            except Exception as e:
+                logger.warning(
+                    "[webhook] Failed to cache payload for route %s: %s",
+                    route_name, e,
+                )
+
+        # Store delivery info for send() — reused across the multiple calls
+        # an agent run produces (progress + final), culled by TTL.
         deliver_config = {
             "deliver": route_config.get("deliver", "log"),
             "deliver_extra": self._render_delivery_extra(
@@ -393,6 +433,7 @@ class WebhookAdapter(BasePlatformAdapter):
             "payload": payload,
         }
         self._delivery_info[session_chat_id] = deliver_config
+        self._delivery_info_ts[session_chat_id] = time.time()
 
         # Build source and event
         source = self.build_source(
@@ -600,17 +641,55 @@ class WebhookAdapter(BasePlatformAdapter):
                 error=f"Platform {platform_name} not connected",
             )
 
-        # Use home channel if no specific chat_id in deliver_extra
+        # Resolve destination(s). Accept either:
+        #   deliver_extra.chat_ids: ["111", "222"]  → fan-out
+        #   deliver_extra.chat_id:  "111"           → single (legacy)
+        # Falls back to the platform's home channel if neither is set.
         extra = delivery.get("deliver_extra", {})
-        chat_id = extra.get("chat_id", "")
-        if not chat_id:
+        raw_chat_ids = extra.get("chat_ids")
+        if isinstance(raw_chat_ids, list) and raw_chat_ids:
+            chat_ids = [str(c).strip() for c in raw_chat_ids if str(c).strip()]
+        elif extra.get("chat_id"):
+            chat_ids = [str(extra["chat_id"]).strip()]
+        else:
             home = self.gateway_runner.config.get_home_channel(target_platform)
             if home:
-                chat_id = home.chat_id
+                chat_ids = [home.chat_id]
             else:
                 return SendResult(
                     success=False,
-                    error=f"No chat_id or home channel for {platform_name}",
+                    error=f"No chat_id/chat_ids or home channel for {platform_name}",
                 )
 
-        return await adapter.send(chat_id, content)
+        # Fan-out delivery. Aggregate result: success if at least one delivery
+        # succeeded (errors logged per-chat for triage).
+        results: list[tuple[str, SendResult]] = []
+        for cid in chat_ids:
+            logger.info(
+                "[webhook] → %s.send(chat_id=%s, len=%d)",
+                platform_name, cid, len(content),
+            )
+            try:
+                r = await adapter.send(cid, content)
+            except Exception as e:
+                r = SendResult(success=False, error=str(e))
+            if not r.success:
+                logger.warning(
+                    "[webhook] delivery to %s:%s failed: %s",
+                    platform_name, cid, r.error,
+                )
+            results.append((cid, r))
+
+        ok = [c for c, r in results if r.success]
+        failed = [(c, r.error) for c, r in results if not r.success]
+        if ok:
+            return SendResult(
+                success=True,
+                message_id=next((r.message_id for _, r in results if r.message_id), None),
+                error=("Partial: failed for " + ", ".join(c for c, _ in failed))
+                if failed else None,
+            )
+        return SendResult(
+            success=False,
+            error=f"All deliveries failed: {failed}",
+        )

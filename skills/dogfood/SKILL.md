@@ -1,6 +1,6 @@
 ---
 name: dogfood
-description: Systematic exploratory QA testing of web applications — find bugs, capture evidence, and generate structured reports
+description: Reusable QA utility for Handler Web — exploratory testing, evidence capture, and structured reporting on top of Play/Web/Graf routing
 version: 1.0.0
 metadata:
   hermes:
@@ -8,13 +8,15 @@ metadata:
     related_skills: []
 ---
 
-# Dogfood: Systematic Web Application QA Testing
+# Dogfood: QA Utility for Handler Web
 
 ## Overview
 
-This skill guides you through systematic exploratory QA testing of web applications using the browser toolset. You will navigate the application, interact with elements, capture evidence of issues, and produce a structured bug report.
+This utility is now treated as an absorbed QA layer on top of Handler Web. It reuses the web rail to inspect flows, capture evidence, and produce structured QA notes or reports when needed.
 
 ## Prerequisites
+
+This utility assumes the web rail is available and already handles Play / Web / Graf routing.
 
 - Browser toolset must be available (`browser_navigate`, `browser_snapshot`, `browser_click`, `browser_type`, `browser_vision`, `browser_console`, `browser_scroll`, `browser_back`, `browser_press`, `browser_close`)
 - A target URL and testing scope from the user

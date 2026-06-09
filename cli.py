@@ -5212,52 +5212,40 @@ class HermesCLI:
                 threading.Thread(target=_restart_recording, daemon=True).start()
 
     def _voice_speak_response(self, text: str):
-        """Speak the agent's response aloud using TTS (runs in background thread)."""
+        """Speak the agent's response aloud using the joint voice orchestrator."""
         if not self._voice_tts:
             return
         self._voice_tts_done.clear()
         try:
-            from tools.tts_tool import text_to_speech_tool
+            from tools.voice_orchestrator import orchestrate_voice
             from tools.voice_mode import play_audio_file
-            import re
 
-            # Strip markdown and non-speech content for cleaner TTS
-            tts_text = text[:4000] if len(text) > 4000 else text
-            tts_text = re.sub(r'```[\s\S]*?```', ' ', tts_text)   # fenced code blocks
-            tts_text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', tts_text)  # [text](url) -> text
-            tts_text = re.sub(r'https?://\S+', '', tts_text)      # URLs
-            tts_text = re.sub(r'\*\*(.+?)\*\*', r'\1', tts_text)  # bold
-            tts_text = re.sub(r'\*(.+?)\*', r'\1', tts_text)      # italic
-            tts_text = re.sub(r'`(.+?)`', r'\1', tts_text)        # inline code
-            tts_text = re.sub(r'^#+\s*', '', tts_text, flags=re.MULTILINE)  # headers
-            tts_text = re.sub(r'^\s*[-*]\s+', '', tts_text, flags=re.MULTILINE)  # list items
-            tts_text = re.sub(r'---+', '', tts_text)              # horizontal rules
-            tts_text = re.sub(r'\n{3,}', '\n\n', tts_text)        # excessive newlines
-            tts_text = tts_text.strip()
-            if not tts_text:
-                return
-
-            # Use MP3 output for CLI playback (afplay doesn't handle OGG well).
-            # The TTS tool may auto-convert MP3->OGG, but the original MP3 remains.
             os.makedirs(os.path.join(tempfile.gettempdir(), "hermes_voice"), exist_ok=True)
             mp3_path = os.path.join(
                 tempfile.gettempdir(), "hermes_voice",
                 f"tts_{time.strftime('%Y%m%d_%H%M%S')}.mp3",
             )
 
-            text_to_speech_tool(text=tts_text, output_path=mp3_path)
+            result = json.loads(
+                orchestrate_voice(
+                    text=text,
+                    output_path=mp3_path,
+                    platform="cli",
+                    dry_run=False,
+                )
+            )
+            audio_path = result.get("audio_path") or mp3_path
+            if result.get("status") != "ok" or not audio_path or not os.path.isfile(audio_path):
+                raise RuntimeError(result.get("error") or "voice orchestration failed")
 
-            # Play the MP3 directly (the TTS tool returns OGG path but MP3 still exists)
-            if os.path.isfile(mp3_path) and os.path.getsize(mp3_path) > 0:
-                play_audio_file(mp3_path)
-                # Clean up
-                try:
-                    os.unlink(mp3_path)
-                    ogg_path = mp3_path.rsplit(".", 1)[0] + ".ogg"
-                    if os.path.isfile(ogg_path):
-                        os.unlink(ogg_path)
-                except OSError:
-                    pass
+            play_audio_file(audio_path)
+            try:
+                os.unlink(audio_path)
+                ogg_path = audio_path.rsplit(".", 1)[0] + ".ogg"
+                if os.path.isfile(ogg_path):
+                    os.unlink(ogg_path)
+            except OSError:
+                pass
         except Exception as e:
             logger.warning("Voice TTS playback failed: %s", e)
             _cprint(f"{_DIM}TTS playback failed: {e}{_RST}")
@@ -5810,9 +5798,9 @@ class HermesCLI:
             self._reasoning_shown_this_turn = False
 
             # --- Streaming TTS setup ---
-            # When ElevenLabs is the TTS provider and sounddevice is available,
-            # we stream audio sentence-by-sentence as the agent generates tokens
-            # instead of waiting for the full response.
+            # OpenVoice is the only allowed voice renderer in the production path.
+            # When OpenVoice is available alongside sound output, we can stream
+            # audio sentence-by-sentence instead of waiting for the full response.
             use_streaming_tts = False
             _streaming_box_opened = False
             text_queue = None
@@ -5825,14 +5813,14 @@ class HermesCLI:
                     from tools.tts_tool import (
                         _load_tts_config as _load_tts_cfg,
                         _get_provider as _get_prov,
-                        _import_elevenlabs,
+                        _import_openvoice_modules,
                         _import_sounddevice,
                         stream_tts_to_speaker,
                     )
                     _tts_cfg = _load_tts_cfg()
-                    if _get_prov(_tts_cfg) == "elevenlabs":
-                        # Verify both ElevenLabs SDK and audio output are available
-                        _import_elevenlabs()
+                    if _get_prov(_tts_cfg) == "openvoice":
+                        # Verify both OpenVoice and audio output are available
+                        _import_openvoice_modules()
                         _import_sounddevice()
                         use_streaming_tts = True
                 except (ImportError, OSError):

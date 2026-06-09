@@ -8,6 +8,10 @@ description: "Catalog of official optional skills available from the repository"
 
 Official optional skills live in the repository under `optional-skills/`. Install them with `hermes skills install official/<category>/<skill>` or browse them with `hermes skills browse --source official`.
 
+For governance and profiling, each skill should also be interpreted through the [Skills Taxonomy](/docs/reference/skills-taxonomy): frontend, services, or backend.
+
+Email workflows should use the current mail stack or dedicated project-specific mail skills; legacy Himalaya references have been removed.
+
 ## autonomous-ai-agents
 
 | Skill | Description | Path |

@@ -1,0 +1,557 @@
+{
+  "samples": [
+    {
+      "name": "technical_noise",
+      "text": "POST /api/auth/login devuelve 401 cuando el JWT expira.",
+      "context": {
+        "interaction_route": "analysis",
+        "voice_trigger": false
+      }
+    },
+    {
+      "name": "reflective_exploration",
+      "text": "Creo que la voz del agente no debería ser solo lectura, sino presencia.",
+      "context": {
+        "interaction_route": "analysis",
+        "voice_trigger": false
+      }
+    },
+    {
+      "name": "breath_only",
+      "text": "ssss...",
+      "context": {
+        "interaction_route": "analysis",
+        "voice_trigger": false
+      }
+    }
+  ],
+  "variants": [
+    "base",
+    "analysis_route",
+    "execution_route"
+  ],
+  "results": [
+    {
+      "sample": "breath_only",
+      "variant": "analysis_route",
+      "stage1": {
+        "stage": "stage_1_channel_gate",
+        "input_channel": "text",
+        "voice_trigger": false,
+        "source_kind": "text",
+        "route": "analysis",
+        "route_reason": "context_explicit_route",
+        "text_present": true,
+        "audio_path": null,
+        "context": {
+          "interaction_route": "analysis",
+          "voice_trigger": false,
+          "route_reason": "compare_pipeline"
+        }
+      },
+      "display_text": "ssss...",
+      "speech_text": "...",
+      "speech_events": [],
+      "voice_reference": "voice_9",
+      "voice_profile": {
+        "profile": "strategic_consultant",
+        "speed": 0.92,
+        "pause_density": 0.88,
+        "authority": 0.72,
+        "warmth": 0.36,
+        "intonation_variation": 0.94,
+        "smile_onset": true,
+        "allow_fillers": false,
+        "allow_breaths": true,
+        "allow_soft_laughter": false,
+        "dialogue_posture": "consultative_dialectic",
+        "communication_quality": "high",
+        "voice_age": "adult_fresh",
+        "youthfulness": 0.34,
+        "accent_hint": "sur_de_espana_sutil"
+      },
+      "style_profile": {
+        "mode": "analytical_consultant",
+        "depth": 0.94,
+        "technicality": 0.44,
+        "conciseness": 0.46,
+        "counterpoint": 0.82,
+        "stance": "exploratory_questioning",
+        "analysis_frame": "contrastive_factorized",
+        "translation_mode": "complex_to_simple",
+        "clarity_priority": 0.98,
+        "persuasive_capacity": 0.48
+      },
+      "status": "ok",
+      "warnings": [],
+      "speech_len": 3,
+      "event_count": 0
+    },
+    {
+      "sample": "breath_only",
+      "variant": "base",
+      "stage1": {
+        "stage": "stage_1_channel_gate",
+        "input_channel": "text",
+        "voice_trigger": false,
+        "source_kind": "text",
+        "route": "analysis",
+        "route_reason": "context_explicit_route",
+        "text_present": true,
+        "audio_path": null,
+        "context": {
+          "interaction_route": "analysis",
+          "voice_trigger": false
+        }
+      },
+      "display_text": "ssss...",
+      "speech_text": "...",
+      "speech_events": [],
+      "voice_reference": "voice_9",
+      "voice_profile": {
+        "profile": "strategic_consultant",
+        "speed": 0.92,
+        "pause_density": 0.88,
+        "authority": 0.72,
+        "warmth": 0.36,
+        "intonation_variation": 0.94,
+        "smile_onset": true,
+        "allow_fillers": false,
+        "allow_breaths": true,
+        "allow_soft_laughter": false,
+        "dialogue_posture": "consultative_dialectic",
+        "communication_quality": "high",
+        "voice_age": "adult_fresh",
+        "youthfulness": 0.34,
+        "accent_hint": "sur_de_espana_sutil"
+      },
+      "style_profile": {
+        "mode": "analytical_consultant",
+        "depth": 0.94,
+        "technicality": 0.44,
+        "conciseness": 0.46,
+        "counterpoint": 0.82,
+        "stance": "exploratory_questioning",
+        "analysis_frame": "contrastive_factorized",
+        "translation_mode": "complex_to_simple",
+        "clarity_priority": 0.98,
+        "persuasive_capacity": 0.48
+      },
+      "status": "ok",
+      "warnings": [],
+      "speech_len": 3,
+      "event_count": 0
+    },
+    {
+      "sample": "breath_only",
+      "variant": "execution_route",
+      "stage1": {
+        "stage": "stage_1_channel_gate",
+        "input_channel": "text",
+        "voice_trigger": false,
+        "source_kind": "text",
+        "route": "execution",
+        "route_reason": "context_explicit_route",
+        "text_present": true,
+        "audio_path": null,
+        "context": {
+          "interaction_route": "execution",
+          "voice_trigger": false,
+          "route_reason": "compare_pipeline"
+        }
+      },
+      "display_text": "ssss...",
+      "speech_text": "...",
+      "speech_events": [],
+      "voice_reference": "voice_9",
+      "voice_profile": {
+        "profile": "strategic_consultant",
+        "speed": 1.03,
+        "pause_density": 0.56,
+        "authority": 0.92,
+        "warmth": 0.2,
+        "intonation_variation": 0.66,
+        "smile_onset": true,
+        "allow_fillers": false,
+        "allow_breaths": false,
+        "allow_soft_laughter": false,
+        "dialogue_posture": "direct_action",
+        "communication_quality": "high",
+        "voice_age": "adult_fresh",
+        "youthfulness": 0.34,
+        "accent_hint": "sur_de_espana_sutil"
+      },
+      "style_profile": {
+        "mode": "executive_assistant",
+        "depth": 0.56,
+        "technicality": 0.26,
+        "conciseness": 0.84,
+        "counterpoint": 0.34,
+        "stance": "decisive",
+        "analysis_frame": "action_first",
+        "translation_mode": "complex_to_simple",
+        "clarity_priority": 0.99,
+        "persuasive_capacity": 0.7
+      },
+      "status": "ok",
+      "warnings": [],
+      "speech_len": 3,
+      "event_count": 0
+    },
+    {
+      "sample": "reflective_exploration",
+      "variant": "analysis_route",
+      "stage1": {
+        "stage": "stage_1_channel_gate",
+        "input_channel": "text",
+        "voice_trigger": false,
+        "source_kind": "text",
+        "route": "analysis",
+        "route_reason": "context_explicit_route",
+        "text_present": true,
+        "audio_path": null,
+        "context": {
+          "interaction_route": "analysis",
+          "voice_trigger": false,
+          "route_reason": "compare_pipeline"
+        }
+      },
+      "display_text": "Creo que la voz del agente no debería ser solo lectura, sino presencia.",
+      "speech_text": "Creo que la voz del agente no debería ser solo lectura, sino presencia.",
+      "speech_events": [
+        {
+          "type": "pause",
+          "position": "clause_1",
+          "duration_ms": 150,
+          "value": ","
+        }
+      ],
+      "voice_reference": "voice_9",
+      "voice_profile": {
+        "profile": "strategic_consultant",
+        "speed": 0.92,
+        "pause_density": 0.88,
+        "authority": 0.72,
+        "warmth": 0.36,
+        "intonation_variation": 0.94,
+        "smile_onset": true,
+        "allow_fillers": false,
+        "allow_breaths": true,
+        "allow_soft_laughter": false,
+        "dialogue_posture": "consultative_dialectic",
+        "communication_quality": "high",
+        "voice_age": "adult_fresh",
+        "youthfulness": 0.34,
+        "accent_hint": "sur_de_espana_sutil"
+      },
+      "style_profile": {
+        "mode": "analytical_consultant",
+        "depth": 0.94,
+        "technicality": 0.44,
+        "conciseness": 0.46,
+        "counterpoint": 0.82,
+        "stance": "exploratory_questioning",
+        "analysis_frame": "contrastive_factorized",
+        "translation_mode": "complex_to_simple",
+        "clarity_priority": 0.98,
+        "persuasive_capacity": 0.48
+      },
+      "status": "ok",
+      "warnings": [],
+      "speech_len": 71,
+      "event_count": 1
+    },
+    {
+      "sample": "reflective_exploration",
+      "variant": "base",
+      "stage1": {
+        "stage": "stage_1_channel_gate",
+        "input_channel": "text",
+        "voice_trigger": false,
+        "source_kind": "text",
+        "route": "analysis",
+        "route_reason": "context_explicit_route",
+        "text_present": true,
+        "audio_path": null,
+        "context": {
+          "interaction_route": "analysis",
+          "voice_trigger": false
+        }
+      },
+      "display_text": "Creo que la voz del agente no debería ser solo lectura, sino presencia.",
+      "speech_text": "Creo que la voz del agente no debería ser solo lectura, sino presencia.",
+      "speech_events": [
+        {
+          "type": "pause",
+          "position": "clause_1",
+          "duration_ms": 150,
+          "value": ","
+        }
+      ],
+      "voice_reference": "voice_9",
+      "voice_profile": {
+        "profile": "strategic_consultant",
+        "speed": 0.92,
+        "pause_density": 0.88,
+        "authority": 0.72,
+        "warmth": 0.36,
+        "intonation_variation": 0.94,
+        "smile_onset": true,
+        "allow_fillers": false,
+        "allow_breaths": true,
+        "allow_soft_laughter": false,
+        "dialogue_posture": "consultative_dialectic",
+        "communication_quality": "high",
+        "voice_age": "adult_fresh",
+        "youthfulness": 0.34,
+        "accent_hint": "sur_de_espana_sutil"
+      },
+      "style_profile": {
+        "mode": "analytical_consultant",
+        "depth": 0.94,
+        "technicality": 0.44,
+        "conciseness": 0.46,
+        "counterpoint": 0.82,
+        "stance": "exploratory_questioning",
+        "analysis_frame": "contrastive_factorized",
+        "translation_mode": "complex_to_simple",
+        "clarity_priority": 0.98,
+        "persuasive_capacity": 0.48
+      },
+      "status": "ok",
+      "warnings": [],
+      "speech_len": 71,
+      "event_count": 1
+    },
+    {
+      "sample": "reflective_exploration",
+      "variant": "execution_route",
+      "stage1": {
+        "stage": "stage_1_channel_gate",
+        "input_channel": "text",
+        "voice_trigger": false,
+        "source_kind": "text",
+        "route": "execution",
+        "route_reason": "context_explicit_route",
+        "text_present": true,
+        "audio_path": null,
+        "context": {
+          "interaction_route": "execution",
+          "voice_trigger": false,
+          "route_reason": "compare_pipeline"
+        }
+      },
+      "display_text": "Creo que la voz del agente no debería ser solo lectura, sino presencia.",
+      "speech_text": "Creo que la voz del agente no debería ser solo lectura, sino presencia.",
+      "speech_events": [
+        {
+          "type": "pause",
+          "position": "clause_1",
+          "duration_ms": 150,
+          "value": ","
+        }
+      ],
+      "voice_reference": "voice_9",
+      "voice_profile": {
+        "profile": "strategic_consultant",
+        "speed": 1.03,
+        "pause_density": 0.56,
+        "authority": 0.92,
+        "warmth": 0.2,
+        "intonation_variation": 0.66,
+        "smile_onset": true,
+        "allow_fillers": false,
+        "allow_breaths": false,
+        "allow_soft_laughter": false,
+        "dialogue_posture": "direct_action",
+        "communication_quality": "high",
+        "voice_age": "adult_fresh",
+        "youthfulness": 0.34,
+        "accent_hint": "sur_de_espana_sutil"
+      },
+      "style_profile": {
+        "mode": "executive_assistant",
+        "depth": 0.56,
+        "technicality": 0.26,
+        "conciseness": 0.84,
+        "counterpoint": 0.34,
+        "stance": "decisive",
+        "analysis_frame": "action_first",
+        "translation_mode": "complex_to_simple",
+        "clarity_priority": 0.99,
+        "persuasive_capacity": 0.7
+      },
+      "status": "ok",
+      "warnings": [],
+      "speech_len": 71,
+      "event_count": 1
+    },
+    {
+      "sample": "technical_noise",
+      "variant": "analysis_route",
+      "stage1": {
+        "stage": "stage_1_channel_gate",
+        "input_channel": "text",
+        "voice_trigger": false,
+        "source_kind": "text",
+        "route": "analysis",
+        "route_reason": "context_explicit_route",
+        "text_present": true,
+        "audio_path": null,
+        "context": {
+          "interaction_route": "analysis",
+          "voice_trigger": false,
+          "route_reason": "compare_pipeline"
+        }
+      },
+      "display_text": "POST /api/auth/login devuelve 401 cuando el JWT expira.",
+      "speech_text": "POST /api/auth/login devuelve 401 cuando el JWT expira.",
+      "speech_events": [],
+      "voice_reference": "voice_9",
+      "voice_profile": {
+        "profile": "strategic_consultant",
+        "speed": 0.92,
+        "pause_density": 0.88,
+        "authority": 0.72,
+        "warmth": 0.36,
+        "intonation_variation": 0.94,
+        "smile_onset": true,
+        "allow_fillers": false,
+        "allow_breaths": true,
+        "allow_soft_laughter": false,
+        "dialogue_posture": "consultative_dialectic",
+        "communication_quality": "high",
+        "voice_age": "adult_fresh",
+        "youthfulness": 0.34,
+        "accent_hint": "sur_de_espana_sutil"
+      },
+      "style_profile": {
+        "mode": "analytical_consultant",
+        "depth": 0.94,
+        "technicality": 0.44,
+        "conciseness": 0.46,
+        "counterpoint": 0.82,
+        "stance": "exploratory_questioning",
+        "analysis_frame": "contrastive_factorized",
+        "translation_mode": "complex_to_simple",
+        "clarity_priority": 0.98,
+        "persuasive_capacity": 0.48
+      },
+      "status": "ok",
+      "warnings": [],
+      "speech_len": 55,
+      "event_count": 0
+    },
+    {
+      "sample": "technical_noise",
+      "variant": "base",
+      "stage1": {
+        "stage": "stage_1_channel_gate",
+        "input_channel": "text",
+        "voice_trigger": false,
+        "source_kind": "text",
+        "route": "analysis",
+        "route_reason": "context_explicit_route",
+        "text_present": true,
+        "audio_path": null,
+        "context": {
+          "interaction_route": "analysis",
+          "voice_trigger": false
+        }
+      },
+      "display_text": "POST /api/auth/login devuelve 401 cuando el JWT expira.",
+      "speech_text": "POST /api/auth/login devuelve 401 cuando el JWT expira.",
+      "speech_events": [],
+      "voice_reference": "voice_9",
+      "voice_profile": {
+        "profile": "strategic_consultant",
+        "speed": 0.92,
+        "pause_density": 0.88,
+        "authority": 0.72,
+        "warmth": 0.36,
+        "intonation_variation": 0.94,
+        "smile_onset": true,
+        "allow_fillers": false,
+        "allow_breaths": true,
+        "allow_soft_laughter": false,
+        "dialogue_posture": "consultative_dialectic",
+        "communication_quality": "high",
+        "voice_age": "adult_fresh",
+        "youthfulness": 0.34,
+        "accent_hint": "sur_de_espana_sutil"
+      },
+      "style_profile": {
+        "mode": "analytical_consultant",
+        "depth": 0.94,
+        "technicality": 0.44,
+        "conciseness": 0.46,
+        "counterpoint": 0.82,
+        "stance": "exploratory_questioning",
+        "analysis_frame": "contrastive_factorized",
+        "translation_mode": "complex_to_simple",
+        "clarity_priority": 0.98,
+        "persuasive_capacity": 0.48
+      },
+      "status": "ok",
+      "warnings": [],
+      "speech_len": 55,
+      "event_count": 0
+    },
+    {
+      "sample": "technical_noise",
+      "variant": "execution_route",
+      "stage1": {
+        "stage": "stage_1_channel_gate",
+        "input_channel": "text",
+        "voice_trigger": false,
+        "source_kind": "text",
+        "route": "execution",
+        "route_reason": "context_explicit_route",
+        "text_present": true,
+        "audio_path": null,
+        "context": {
+          "interaction_route": "execution",
+          "voice_trigger": false,
+          "route_reason": "compare_pipeline"
+        }
+      },
+      "display_text": "POST /api/auth/login devuelve 401 cuando el JWT expira.",
+      "speech_text": "POST /api/auth/login devuelve 401 cuando el JWT expira.",
+      "speech_events": [],
+      "voice_reference": "voice_9",
+      "voice_profile": {
+        "profile": "strategic_consultant",
+        "speed": 1.03,
+        "pause_density": 0.56,
+        "authority": 0.92,
+        "warmth": 0.2,
+        "intonation_variation": 0.66,
+        "smile_onset": true,
+        "allow_fillers": false,
+        "allow_breaths": false,
+        "allow_soft_laughter": false,
+        "dialogue_posture": "direct_action",
+        "communication_quality": "high",
+        "voice_age": "adult_fresh",
+        "youthfulness": 0.34,
+        "accent_hint": "sur_de_espana_sutil"
+      },
+      "style_profile": {
+        "mode": "executive_assistant",
+        "depth": 0.56,
+        "technicality": 0.26,
+        "conciseness": 0.84,
+        "counterpoint": 0.34,
+        "stance": "decisive",
+        "analysis_frame": "action_first",
+        "translation_mode": "complex_to_simple",
+        "clarity_priority": 0.99,
+        "persuasive_capacity": 0.7
+      },
+      "status": "ok",
+      "warnings": [],
+      "speech_len": 55,
+      "event_count": 0
+    }
+  ]
+}

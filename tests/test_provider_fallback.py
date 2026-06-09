@@ -5,7 +5,13 @@ the new list-based ``fallback_providers`` config format and chain
 advancement through multiple providers.
 """
 
+import sys
+import types
 from unittest.mock import MagicMock, patch
+
+sys.modules.setdefault("fire", types.SimpleNamespace(Fire=lambda *a, **k: None))
+sys.modules.setdefault("firecrawl", types.SimpleNamespace(Firecrawl=object))
+sys.modules.setdefault("fal_client", types.SimpleNamespace())
 
 from run_agent import AIAgent
 
@@ -124,8 +130,8 @@ class TestFallbackChainAdvancement:
             assert agent._try_activate_fallback() is True
             assert agent._try_activate_fallback() is False
 
-    def test_skips_unconfigured_provider_to_next(self):
-        """If resolve_provider_client returns None, skip to next in chain."""
+    def test_skips_provider_that_raises_to_next(self):
+        """If resolve_provider_client raises, skip to next in chain."""
         fbs = [
             {"provider": "broken", "model": "nope"},
             {"provider": "openai", "model": "gpt-4o"},
@@ -133,12 +139,27 @@ class TestFallbackChainAdvancement:
         agent = _make_agent(fallback_model=fbs)
         with patch("agent.auxiliary_client.resolve_provider_client") as mock_rpc:
             mock_rpc.side_effect = [
-                (None, None),                    # broken provider
-                (_mock_client(), "gpt-4o"),       # fallback succeeds
+                RuntimeError("auth failed"),
+                (_mock_client(), "gpt-4o"),
             ]
             assert agent._try_activate_fallback() is True
             assert agent.model == "gpt-4o"
             assert agent._fallback_index == 2
+
+    def test_launches_standby_once_when_fallback_activates(self):
+        fbs = [
+            {"provider": "openai", "model": "gpt-4o"},
+            {"provider": "zai", "model": "glm-4.7"},
+        ]
+        agent = _make_agent(fallback_model=fbs)
+        with patch("agent.auxiliary_client.resolve_provider_client", return_value=(_mock_client(), "gpt-4o")), \
+             patch("run_agent.subprocess.Popen") as mock_popen:
+            assert agent._try_activate_fallback() is True
+            assert mock_popen.call_count == 1
+            args, kwargs = mock_popen.call_args
+            cmd = args[0]
+            assert "hermes_reconnect_standby.py" in " ".join(cmd)
+            assert agent._fallback_activated is True
 
     def test_skips_provider_that_raises_to_next(self):
         """If resolve_provider_client raises, skip to next in chain."""

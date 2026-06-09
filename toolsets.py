@@ -46,8 +46,8 @@ _HERMES_CORE_TOOLS = [
     "browser_type", "browser_scroll", "browser_back",
     "browser_press", "browser_close", "browser_get_images",
     "browser_vision", "browser_console",
-    # Text-to-speech
-    "text_to_speech",
+    # Text-to-speech + voice orchestration
+    "text_to_speech", "voice_orchestrator",
     # Planning & memory
     "todo", "memory",
     # Session history search

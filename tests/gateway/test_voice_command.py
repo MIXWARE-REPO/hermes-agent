@@ -1,5 +1,6 @@
 """Tests for the /voice command and auto voice reply in the gateway."""
 
+import asyncio
 import importlib.util
 import json
 import os
@@ -293,6 +294,11 @@ class TestAutoVoiceReply:
     def test_off_mode_text(self, runner):
         assert self._call(runner, "off", MessageType.TEXT) is False
 
+    def test_photo_and_document_input_never_trigger_voice_reply(self, runner):
+        """Telegram photo/document inputs must not activate the voice reply path."""
+        assert self._call(runner, "all", MessageType.PHOTO) is False
+        assert self._call(runner, "all", MessageType.DOCUMENT) is False
+
     # -- Discord VC exception: runner must handle --------------------------
 
     def test_discord_vc_voice_input_base_handles(self, runner):
@@ -364,6 +370,39 @@ class TestSendVoiceReply:
         mock_adapter.send_voice.assert_called_once()
         call_args = mock_adapter.send_voice.call_args
         assert call_args.kwargs.get("chat_id") == "123"
+
+    def test_telegram_audio_voice_reply_builds_voice_context(self, runner):
+        """Telegram AUDIO input must use the same voice contract as VOICE input."""
+        mock_adapter = AsyncMock()
+        mock_adapter.send_voice = AsyncMock(return_value=SimpleNamespace(success=True, message_id="m-1"))
+        event = _make_event(message_type=MessageType.AUDIO)
+        runner.adapters[event.source.platform] = mock_adapter
+
+        captured = {}
+
+        def _fake_orchestrate_voice(**kwargs):
+            captured.update(kwargs)
+            return json.dumps({
+                "status": "ok",
+                "audio_path": "/tmp/test.ogg",
+                "file_path": "/tmp/test.ogg",
+                "success": True,
+                "error": None,
+            }, ensure_ascii=False)
+
+        with patch("tools.voice_orchestrator.orchestrate_voice", side_effect=_fake_orchestrate_voice), \
+             patch("os.path.isfile", return_value=True), \
+             patch("os.unlink"), \
+             patch("os.makedirs"):
+            asyncio.run(runner._send_voice_reply(event, "Hola desde audio"))
+
+        assert captured["context"]["input_channel"] == "voice"
+        assert captured["context"]["voice_trigger"] is True
+        assert captured["context"]["platform"] == "telegram"
+        assert captured["context"]["interaction_route"] == "analysis"
+        assert captured["context"]["route_reason"] == "default_analysis"
+        assert captured["context"]["session_key"] == ""
+        assert captured["text"] == "Hola desde audio"
 
     @pytest.mark.asyncio
     async def test_empty_text_after_strip_skips(self, runner):
@@ -2489,11 +2528,11 @@ class TestVoiceTTSPlayback:
         runner = self._make_runner()
         assert self._call_should_reply(runner, "all", MessageType.VOICE, already_sent=False) is False
 
-    def test_text_input_voice_all_runner_fires(self):
-        """Streaming OFF + text input + voice_mode=all: runner generates TTS."""
+    def test_text_input_voice_all_runner_skips(self):
+        """Streaming OFF + text input: runner must not generate TTS."""
         from gateway.platforms.base import MessageType
         runner = self._make_runner()
-        assert self._call_should_reply(runner, "all", MessageType.TEXT, already_sent=False) is True
+        assert self._call_should_reply(runner, "all", MessageType.TEXT, already_sent=False) is False
 
     def test_text_input_voice_off_no_tts(self):
         """Streaming OFF + text input + voice_mode=off: no TTS."""
@@ -2536,11 +2575,11 @@ class TestVoiceTTSPlayback:
         runner = self._make_runner()
         assert self._call_should_reply(runner, "all", MessageType.VOICE, already_sent=True) is True
 
-    def test_streaming_on_text_input_runner_fires(self):
-        """Streaming ON + text input: runner handles TTS (same as before)."""
+    def test_streaming_on_text_input_runner_skips(self):
+        """Streaming ON + text input: runner must not handle TTS."""
         from gateway.platforms.base import MessageType
         runner = self._make_runner()
-        assert self._call_should_reply(runner, "all", MessageType.TEXT, already_sent=True) is True
+        assert self._call_should_reply(runner, "all", MessageType.TEXT, already_sent=True) is False
 
     def test_streaming_on_voice_off_no_tts(self):
         """Streaming ON + voice_mode=off: no TTS regardless of streaming."""

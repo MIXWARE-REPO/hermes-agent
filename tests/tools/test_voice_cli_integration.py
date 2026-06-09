@@ -77,6 +77,21 @@ class TestMarkdownStripping:
         assert "https://" not in result
         assert "Visit" in result
 
+    def test_strips_media_directives_and_path_like_tokens(self):
+        text = "MEDIA:/tmp/tts_reply_6d88d83fe55b.ogg [[audio_as_voice]] and /api/v1/reports/close_ticket"
+        result = _strip_markdown_for_tts(text)
+        assert "MEDIA:" not in result
+        assert "audio_as_voice" not in result
+        assert "tts_reply_6d88d83fe55b" not in result
+        assert "/api/" not in result
+
+    def test_collapses_endpoint_speakable_noise(self):
+        text = "Te paso el endpoint de registro /api/v1/auth/register para que lo uses"
+        result = _strip_markdown_for_tts(text)
+        assert "endpoint" not in result.lower() or "dato técnico" in result.lower()
+        assert "register" not in result.lower()
+        assert len(result.split()) <= 4
+
     def test_strips_markdown_links(self):
         text = "See [the docs](https://example.com/docs) for info"
         result = _strip_markdown_for_tts(text)
@@ -172,113 +187,84 @@ class TestVoiceStateLock:
 
 
 # ============================================================================
-# Streaming TTS lazy import activation (Bug A fix)
+# Streaming TTS lazy import activation (OpenVoice path)
 # ============================================================================
 
 class TestStreamingTTSActivation:
-    """Verify streaming TTS uses lazy imports to check availability."""
+    """Verify streaming TTS is only eligible when OpenVoice is available."""
 
-    def test_activates_when_elevenlabs_and_sounddevice_available(self):
-        """use_streaming_tts should be True when provider is elevenlabs
-        and both lazy imports succeed."""
+    def test_activates_when_openvoice_available(self):
         use_streaming_tts = False
         try:
             from tools.tts_tool import (
                 _load_tts_config as _load_tts_cfg,
                 _get_provider as _get_prov,
-                _import_elevenlabs,
-                _import_sounddevice,
+                _import_openvoice_modules,
             )
-            assert callable(_import_elevenlabs)
-            assert callable(_import_sounddevice)
+            assert callable(_import_openvoice_modules)
         except ImportError:
             pytest.skip("tools.tts_tool not available")
 
-        with patch("tools.tts_tool._load_tts_config") as mock_cfg, \
-             patch("tools.tts_tool._get_provider", return_value="elevenlabs"), \
-             patch("tools.tts_tool._import_elevenlabs") as mock_el, \
-             patch("tools.tts_tool._import_sounddevice") as mock_sd:
-            mock_cfg.return_value = {"provider": "elevenlabs"}
-            mock_el.return_value = MagicMock()
-            mock_sd.return_value = MagicMock()
+        with patch("tools.tts_tool._load_tts_config", return_value={"provider": "openvoice"}), \
+             patch("tools.tts_tool._get_provider", return_value="openvoice"), \
+             patch("tools.tts_tool._import_openvoice_modules") as mock_ov:
+            mock_ov.return_value = MagicMock()
 
             from tools.tts_tool import (
                 _load_tts_config as load_cfg,
                 _get_provider as get_prov,
-                _import_elevenlabs as import_el,
-                _import_sounddevice as import_sd,
+                _import_openvoice_modules as import_ov,
             )
             cfg = load_cfg()
-            if get_prov(cfg) == "elevenlabs":
-                import_el()
-                import_sd()
+            if get_prov(cfg) == "openvoice":
+                import_ov()
                 use_streaming_tts = True
 
         assert use_streaming_tts is True
 
-    def test_does_not_activate_when_elevenlabs_missing(self):
-        """use_streaming_tts stays False when elevenlabs import fails."""
+    def test_does_not_activate_when_openvoice_missing(self):
         use_streaming_tts = False
-        with patch("tools.tts_tool._load_tts_config", return_value={"provider": "elevenlabs"}), \
-             patch("tools.tts_tool._get_provider", return_value="elevenlabs"), \
-             patch("tools.tts_tool._import_elevenlabs", side_effect=ImportError("no elevenlabs")):
+        with patch("tools.tts_tool._load_tts_config", return_value={"provider": "openvoice"}), \
+             patch("tools.tts_tool._get_provider", return_value="openvoice"), \
+             patch("tools.tts_tool._import_openvoice_modules", side_effect=ImportError("no openvoice")):
             try:
                 from tools.tts_tool import (
                     _load_tts_config as load_cfg,
                     _get_provider as get_prov,
-                    _import_elevenlabs as import_el,
-                    _import_sounddevice as import_sd,
+                    _import_openvoice_modules as import_ov,
                 )
                 cfg = load_cfg()
-                if get_prov(cfg) == "elevenlabs":
-                    import_el()
-                    import_sd()
+                if get_prov(cfg) == "openvoice":
+                    import_ov()
                     use_streaming_tts = True
             except (ImportError, OSError):
                 pass
 
         assert use_streaming_tts is False
 
-    def test_does_not_activate_when_sounddevice_missing(self):
-        """use_streaming_tts stays False when sounddevice import fails."""
-        use_streaming_tts = False
-        with patch("tools.tts_tool._load_tts_config", return_value={"provider": "elevenlabs"}), \
-             patch("tools.tts_tool._get_provider", return_value="elevenlabs"), \
-             patch("tools.tts_tool._import_elevenlabs", return_value=MagicMock()), \
-             patch("tools.tts_tool._import_sounddevice", side_effect=OSError("no PortAudio")):
-            try:
-                from tools.tts_tool import (
-                    _load_tts_config as load_cfg,
-                    _get_provider as get_prov,
-                    _import_elevenlabs as import_el,
-                    _import_sounddevice as import_sd,
-                )
-                cfg = load_cfg()
-                if get_prov(cfg) == "elevenlabs":
-                    import_el()
-                    import_sd()
-                    use_streaming_tts = True
-            except (ImportError, OSError):
-                pass
-
-        assert use_streaming_tts is False
-
-    def test_does_not_activate_for_non_elevenlabs_provider(self):
-        """use_streaming_tts stays False when provider is not elevenlabs."""
+    def test_does_not_activate_when_provider_is_not_openvoice(self):
         use_streaming_tts = False
         with patch("tools.tts_tool._load_tts_config", return_value={"provider": "edge"}), \
              patch("tools.tts_tool._get_provider", return_value="edge"):
             try:
-                from tools.tts_tool import (
-                    _load_tts_config as load_cfg,
-                    _get_provider as get_prov,
-                    _import_elevenlabs as import_el,
-                    _import_sounddevice as import_sd,
-                )
+                from tools.tts_tool import _load_tts_config as load_cfg, _get_provider as get_prov
                 cfg = load_cfg()
-                if get_prov(cfg) == "elevenlabs":
-                    import_el()
-                    import_sd()
+                if get_prov(cfg) == "openvoice":
+                    use_streaming_tts = True
+            except (ImportError, OSError):
+                pass
+
+        assert use_streaming_tts is False
+
+    def test_does_not_activate_when_provider_is_not_openvoice(self):
+        """use_streaming_tts stays False when provider is not openvoice."""
+        use_streaming_tts = False
+        with patch("tools.tts_tool._load_tts_config", return_value={"provider": "edge"}), \
+             patch("tools.tts_tool._get_provider", return_value="edge"):
+            try:
+                from tools.tts_tool import _load_tts_config as load_cfg, _get_provider as get_prov
+                cfg = load_cfg()
+                if get_prov(cfg) == "openvoice":
                     use_streaming_tts = True
             except (ImportError, OSError):
                 pass
@@ -491,42 +477,18 @@ class TestVprintForceParameter:
 # Bug fix regression tests
 # ============================================================================
 
-class TestEdgeTTSLazyImport:
-    """Bug #3: _generate_edge_tts must use lazy import, not bare module name."""
+class TestEdgeTTSDisabled:
+    """Edge TTS must not be selectable as the production provider."""
 
-    def test_generate_edge_tts_calls_lazy_import(self):
-        """AST check: _generate_edge_tts must call _import_edge_tts(), not
-        reference bare 'edge_tts' module name."""
-        import ast as _ast
+    def test_edge_provider_is_rejected_by_text_to_speech_tool(self, tmp_path):
+        import json
+        import tools.tts_tool as tts
 
-        with open("tools/tts_tool.py") as f:
-            tree = _ast.parse(f.read())
+        with patch.object(tts, "_load_tts_config", return_value={"provider": "edge"}):
+            result = json.loads(tts.text_to_speech_tool("hola", output_path=str(tmp_path / "edge.ogg")))
 
-        for node in _ast.walk(tree):
-            if isinstance(node, _ast.AsyncFunctionDef) and node.name == "_generate_edge_tts":
-                # Collect all Name references (bare identifiers)
-                bare_refs = [
-                    n.id for n in _ast.walk(node)
-                    if isinstance(n, _ast.Name) and n.id == "edge_tts"
-                ]
-                assert bare_refs == [], (
-                    f"_generate_edge_tts uses bare 'edge_tts' name — "
-                    f"should use _import_edge_tts() lazy helper"
-                )
-
-                # Must have a call to _import_edge_tts
-                lazy_calls = [
-                    n for n in _ast.walk(node)
-                    if isinstance(n, _ast.Call)
-                    and isinstance(n.func, _ast.Name)
-                    and n.func.id == "_import_edge_tts"
-                ]
-                assert len(lazy_calls) >= 1, (
-                    "_generate_edge_tts must call _import_edge_tts()"
-                )
-                break
-        else:
-            pytest.fail("_generate_edge_tts not found in tts_tool.py")
+        assert result["success"] is False
+        assert "Unsupported TTS provider" in result["error"]
 
 
 class TestStreamingTTSOutputStreamCleanup:

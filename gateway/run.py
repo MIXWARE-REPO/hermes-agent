@@ -504,6 +504,11 @@ class GatewayRunner:
         # Per-chat voice reply mode: "off" | "voice_only" | "all"
         self._voice_mode: Dict[str, str] = self._load_voice_modes()
 
+        # Per-session interaction route state (analysis vs execution)
+        # Sticky across turns until the user explicitly changes intent or the
+        # topic is reset.
+        self._interaction_route_state: Dict[str, Dict[str, Any]] = {}
+
         # Track background tasks to prevent garbage collection mid-execution
         self._background_tasks: set = set()
 
@@ -619,6 +624,120 @@ class GatewayRunner:
         disabled_chats.clear()
         disabled_chats.update(
             chat_id for chat_id, mode in self._voice_mode.items() if mode == "off"
+        )
+
+    def _build_interaction_route_flag(
+        self,
+        session_key: str,
+        event: MessageEvent,
+        message_text: str,
+        *,
+        is_new_session: bool = False,
+    ) -> str:
+        """Build and persist a deterministic per-session routing flag."""
+        channel = "voice" if event.message_type in (MessageType.VOICE, MessageType.AUDIO) else "text"
+        normalized_text = (message_text or "").strip().lower()
+
+        # Intent heuristics: explicit language beats sticky state, and a fresh
+        # session always starts from a clean slate.
+        execution_markers = (
+            "ejecuta",
+            "ejecutar",
+            "hazlo",
+            "vamos a ejecución",
+            "pasar a ejecución",
+            "pasamos a ejecución",
+            "activa",
+            "ponlo en marcha",
+            "adelante",
+            "sí, ejecuta",
+            "lo hago",
+            "dale",
+            "perfecto, lo hago",
+            "ok, ejec",
+        )
+        analysis_markers = (
+            "analiza",
+            "analizar",
+            "investiga",
+            "explora",
+            "piensa",
+            "definamos",
+            "estrategia",
+            "todavía no ejecutes",
+            "no ejecutes",
+            "sin ejecutar",
+            "consultar",
+            "consultivo",
+        )
+        topic_shift_markers = (
+            "cambiemos de tema",
+            "otro tema",
+            "nuevo tema",
+            "ahora hablemos de",
+            "pasemos a",
+            "cambiando de tema",
+            "cambio de tema",
+        )
+
+        if is_new_session:
+            self._interaction_route_state.pop(session_key, None)
+
+        current_state = self._interaction_route_state.get(session_key, {})
+        current_route = current_state.get("interaction_route")
+        current_epoch = int(current_state.get("topic_epoch", 0) or 0)
+
+        explicit_execution = event.get_command() is not None or any(marker in normalized_text for marker in execution_markers)
+        explicit_analysis = any(marker in normalized_text for marker in analysis_markers)
+        topic_shift = any(marker in normalized_text for marker in topic_shift_markers)
+
+        if explicit_execution:
+            route = "execution"
+            reason = "explicit_execution"
+            current_epoch += 1 if topic_shift or current_route != "execution" else 0
+        elif explicit_analysis:
+            route = "analysis"
+            reason = "explicit_analysis"
+            current_epoch += 1 if topic_shift or current_route != "analysis" else 0
+        elif topic_shift:
+            route = current_route or "analysis"
+            reason = "topic_shift_sticky"
+            current_epoch += 1
+        elif current_route:
+            route = current_route
+            reason = current_state.get("route_reason", "sticky")
+        else:
+            route = "analysis"
+            reason = "default_analysis"
+            current_epoch = 1
+
+        positioning = "action-oriented" if route == "execution" else "consultative"
+        voice_trigger = "true" if channel == "voice" else "false"
+
+        state = {
+            "interaction_route": route,
+            "route_reason": reason,
+            "topic_epoch": current_epoch or 1,
+            "last_channel": channel,
+            "last_voice_trigger": voice_trigger,
+            "last_message": normalized_text[:200],
+        }
+        self._interaction_route_state[session_key] = state
+
+        return (
+            "# Interaction routing flag\n"
+            f"session_route: {route}\n"
+            f"route_reason: {reason}\n"
+            f"topic_epoch: {state['topic_epoch']}\n"
+            f"input_channel: {channel}\n"
+            f"interaction_route: {route}\n"
+            f"llm_positioning: {positioning}\n"
+            f"voice_trigger: {voice_trigger}\n"
+            "Use this flag to position the LLM request before deciding depth, tone, and tool use.\n"
+            "When input_channel=voice and interaction_route=analysis, keep the reply expansive, "
+            "dialogue-friendly, and consultative. When interaction_route=execution, keep it short, "
+            "direct, and action-oriented.\n"
+            "Keep the flag sticky for the current topic until the user clearly changes intent or the topic shifts."
         )
 
     # -----------------------------------------------------------------
@@ -2438,8 +2557,15 @@ class GatewayRunner:
                 "Keep the introduction concise -- one or two sentences max.]"
             )
         
-        # One-time prompt if no home channel is set for this platform
-        if not history and source.platform and source.platform != Platform.LOCAL:
+        # One-time prompt if no home channel is set for this platform.
+        # Skip for headless platforms (webhook, api_server) where delivery
+        # is configured per-route and a "home channel" doesn't apply.
+        if (
+            not history
+            and source.platform
+            and source.platform
+            not in (Platform.LOCAL, Platform.WEBHOOK, Platform.API_SERVER)
+        ):
             platform_name = source.platform.value
             env_key = f"{platform_name.upper()}_HOME_CHANNEL"
             if not os.getenv(env_key):
@@ -2509,13 +2635,13 @@ class GatewayRunner:
                 )
                 if is_audio:
                     audio_paths.append(path)
+            has_audio_input = bool(audio_paths)
             if audio_paths:
                 message_text = await self._enrich_message_with_transcription(
-                    message_text, audio_paths
+                    message_text, audio_paths, source=source
                 )
-                # If STT failed, send a direct message to the user so they
-                # know voice isn't configured — don't rely on the agent to
-                # relay the error clearly.
+                # If STT failed, we only emit a text fallback for non-Telegram
+                # voice/audio paths. Telegram voice/audio must stay voice-only.
                 _stt_fail_markers = (
                     "No STT provider",
                     "STT is disabled",
@@ -2538,10 +2664,11 @@ class GatewayRunner:
                             # Point to setup skill if it's installed
                             if self._has_setup_skill():
                                 _stt_msg += "\n\nFor full setup instructions, type: `/skill hermes-agent-setup`"
-                            await _stt_adapter.send(
-                                source.chat_id, _stt_msg,
-                                metadata=_stt_meta,
-                            )
+                            if not (source.platform == Platform.TELEGRAM and has_audio_input):
+                                await _stt_adapter.send(
+                                    source.chat_id, _stt_msg,
+                                    metadata=_stt_meta,
+                                )
                         except Exception:
                             pass
 
@@ -2593,6 +2720,14 @@ class GatewayRunner:
             )
             if not found_in_history:
                 message_text = f'[Replying to: "{reply_snippet}"]\n\n{message_text}'
+
+        route_flag = self._build_interaction_route_flag(
+            session_key,
+            event,
+            message_text,
+            is_new_session=_is_new_session,
+        )
+        context_prompt = f"{context_prompt}\n\n{route_flag}"
 
         try:
             # Emit agent:start hook
@@ -2825,10 +2960,27 @@ class GatewayRunner:
                 base_url=agent_result.get("base_url"),
             )
 
-            # Auto voice reply: send TTS audio before the text response
+            # Auto voice reply: send TTS audio before the text response.
+            # For Telegram voice/audio input, we suppress the text return so
+            # the user receives voice-only output instead of a text duplicate.
             _already_sent = bool(agent_result.get("already_sent"))
-            if self._should_send_voice_reply(event, response, agent_messages, already_sent=_already_sent):
-                await self._send_voice_reply(event, response)
+            _force_voice_only = (
+                event.source.platform == Platform.TELEGRAM
+                and event.message_type in (MessageType.VOICE, MessageType.AUDIO)
+            )
+            _voice_reply_requested = _force_voice_only or self._should_send_voice_reply(
+                event, response, agent_messages, already_sent=_already_sent
+            )
+            _voice_delivery_ok = True
+            if _voice_reply_requested:
+                _voice_delivery_ok = await self._send_voice_reply(
+                    event, response, session_key=session_key
+                )
+
+            # Telegram voice/audio input should be voice-first, but if the voice
+            # delivery fails we must not leave the user with silence.
+            if _force_voice_only:
+                return None if _voice_delivery_ok else response
 
             # If streaming already delivered the response, extract and
             # deliver any MEDIA: files before returning None.  Streaming
@@ -3664,71 +3816,62 @@ class GatewayRunner:
         if not response or response.startswith("Error:"):
             return False
 
-        chat_id = event.source.chat_id
-        voice_mode = self._voice_mode.get(chat_id, "off")
-        is_voice_input = (event.message_type == MessageType.VOICE)
-
-        should = (
-            (voice_mode == "all")
-            or (voice_mode == "voice_only" and is_voice_input)
-        )
-        if not should:
+        # The generic helper is intentionally disabled for text turns.
+        # Telegram voice/audio is handled by the dedicated force-voice path.
+        if event.message_type not in (MessageType.VOICE, MessageType.AUDIO):
             return False
+        return False
 
-        # Dedup: agent already called TTS tool
-        has_agent_tts = any(
-            msg.get("role") == "assistant"
-            and any(
-                tc.get("function", {}).get("name") == "text_to_speech"
-                for tc in (msg.get("tool_calls") or [])
-            )
-            for msg in agent_messages
-        )
-        if has_agent_tts:
-            return False
+    async def _send_voice_reply(self, event: MessageEvent, text: str, session_key: Optional[str] = None) -> bool:
+        """Generate voice audio through the orchestrator and send it before the text reply.
 
-        # Dedup: base adapter auto-TTS already handles voice input
-        # (play_tts plays in VC when connected, so runner can skip).
-        # When streaming already delivered the text (already_sent=True),
-        # the base adapter will receive None and can't run auto-TTS,
-        # so the runner must take over.
-        if is_voice_input and not already_sent:
-            return False
-
-        return True
-
-    async def _send_voice_reply(self, event: MessageEvent, text: str) -> None:
-        """Generate TTS audio and send as a voice message before the text reply."""
+        Returns True when the voice artifact was delivered successfully, False otherwise.
+        """
         import uuid as _uuid
         audio_path = None
         actual_path = None
         try:
-            from tools.tts_tool import text_to_speech_tool, _strip_markdown_for_tts
+            from tools.voice_orchestrator import orchestrate_voice
 
-            tts_text = _strip_markdown_for_tts(text[:4000])
-            if not tts_text:
-                return
-
-            # Use .mp3 extension so edge-tts conversion to opus works correctly.
-            # The TTS tool may convert to .ogg — use file_path from result.
             audio_path = os.path.join(
                 tempfile.gettempdir(), "hermes_voice",
-                f"tts_reply_{_uuid.uuid4().hex[:12]}.mp3",
+                f"tts_reply_{_uuid.uuid4().hex[:12]}.ogg",
             )
             os.makedirs(os.path.dirname(audio_path), exist_ok=True)
 
+            route_state = self._interaction_route_state.get(session_key or "", {}) if session_key else {}
+            voice_context = {
+                "session_key": session_key or "",
+                "platform": event.source.platform.value if event.source.platform else "",
+                "chat_id": event.source.chat_id,
+                "message_id": event.message_id,
+                "interaction_route": route_state.get("interaction_route", "analysis"),
+                "route_reason": route_state.get("route_reason", "default_analysis"),
+                "topic_epoch": route_state.get("topic_epoch", 1),
+                "input_channel": "voice" if event.message_type in (MessageType.VOICE, MessageType.AUDIO) else "text",
+                "voice_trigger": event.message_type in (MessageType.VOICE, MessageType.AUDIO),
+            }
             result_json = await asyncio.to_thread(
-                text_to_speech_tool, text=tts_text, output_path=audio_path
+                orchestrate_voice,
+                text=text,
+                context=voice_context,
+                output_path=audio_path,
+                platform=event.source.platform.value if event.source.platform else None,
+                dry_run=False,
             )
             result = json.loads(result_json)
 
-            # Use the actual file path from result (may differ after opus conversion)
-            actual_path = result.get("file_path", audio_path)
-            if not result.get("success") or not os.path.isfile(actual_path):
-                logger.warning("Auto voice reply TTS failed: %s", result.get("error"))
-                return
+            actual_path = result.get("audio_path") or result.get("file_path") or audio_path
+            legacy_success = bool(result.get("success"))
+            status_ok = result.get("status") in ("ok", "ready", "delivered")
+            if not ((status_ok or legacy_success) and actual_path and os.path.isfile(actual_path)):
+                logger.warning("Auto voice reply orchestration failed: %s", result.get("error"))
+                return False
 
             adapter = self.adapters.get(event.source.platform)
+            if not adapter:
+                logger.warning("Auto voice reply failed: no adapter for platform %s", event.source.platform)
+                return False
 
             # If connected to a voice channel, play there instead of sending a file
             guild_id = self._get_guild_id(event)
@@ -3737,7 +3880,8 @@ class GatewayRunner:
                     and hasattr(adapter, "is_in_voice_channel")
                     and adapter.is_in_voice_channel(guild_id)):
                 await adapter.play_in_voice_channel(guild_id, actual_path)
-            elif adapter and hasattr(adapter, "send_voice"):
+                return True
+            elif hasattr(adapter, "send_voice"):
                 send_kwargs: Dict[str, Any] = {
                     "chat_id": event.source.chat_id,
                     "audio_path": actual_path,
@@ -3745,7 +3889,25 @@ class GatewayRunner:
                 }
                 if event.source.thread_id:
                     send_kwargs["metadata"] = {"thread_id": event.source.thread_id}
-                await adapter.send_voice(**send_kwargs)
+                send_result = await adapter.send_voice(**send_kwargs)
+                if getattr(send_result, "success", False):
+                    logger.info(
+                        "Auto voice reply delivered OK: chat_id=%s message_id=%s path=%s",
+                        event.source.chat_id,
+                        getattr(send_result, "message_id", ""),
+                        actual_path,
+                    )
+                    return True
+                logger.warning(
+                    "Auto voice reply send failed: chat_id=%s error=%s path=%s",
+                    event.source.chat_id,
+                    getattr(send_result, "error", "unknown"),
+                    actual_path,
+                )
+                return False
+            else:
+                logger.warning("Auto voice reply failed: adapter %s has no voice delivery method", adapter)
+                return False
         except Exception as e:
             logger.warning("Auto voice reply failed: %s", e, exc_info=True)
         finally:
@@ -3754,6 +3916,7 @@ class GatewayRunner:
                     os.unlink(p)
                 except OSError:
                     pass
+        return False
 
     async def _deliver_media_from_response(
         self,
@@ -5071,6 +5234,7 @@ class GatewayRunner:
         self,
         user_text: str,
         audio_paths: List[str],
+        source: Optional[SessionSource] = None,
     ) -> str:
         """
         Auto-transcribe user voice/audio messages using the configured STT provider
@@ -5095,24 +5259,39 @@ class GatewayRunner:
                 return f"{disabled_note}\n\n{user_text}"
             return disabled_note
 
-        from tools.transcription_tools import transcribe_audio, get_stt_model_from_config
+        from tools.voice_orchestrator import orchestrate_voice_input
         import asyncio
-
-        stt_model = get_stt_model_from_config()
 
         enriched_parts = []
         for path in audio_paths:
             try:
-                logger.debug("Transcribing user voice: %s", path)
-                result = await asyncio.to_thread(transcribe_audio, path, model=stt_model)
-                if result["success"]:
-                    transcript = result["transcript"]
+                logger.debug("Transcribing user voice via voice_orchestrator: %s", path)
+                platform_name = source.platform.value if source and source.platform else None
+                session_key = self._session_key_for_source(source) if source else ""
+                result_json = await asyncio.to_thread(
+                    orchestrate_voice_input,
+                    audio_path=path,
+                    dry_run=True,
+                    platform=platform_name,
+                    context={
+                        "interaction_route": "analysis",
+                        "route_reason": "voice_input_transcription",
+                        "topic_epoch": 1,
+                        "input_channel": "voice",
+                        "voice_trigger": True,
+                        "session_key": session_key,
+                    },
+                )
+                result = json.loads(result_json)
+                transcript = (result.get("transcript") or result.get("final_text") or "").strip()
+                transcription = result.get("transcription") or {}
+                if transcript:
                     enriched_parts.append(
                         f'[The user sent a voice message~ '
                         f'Here\'s what they said: "{transcript}"]'
                     )
                 else:
-                    error = result.get("error", "unknown error")
+                    error = transcription.get("error", result.get("error", "unknown error"))
                     if (
                         "No STT provider" in error
                         or error.startswith("Neither VOICE_TOOLS_OPENAI_KEY nor OPENAI_API_KEY is set")
@@ -5140,8 +5319,8 @@ class GatewayRunner:
                 logger.error("Transcription error: %s", e)
                 enriched_parts.append(
                     "[The user sent a voice message but something went wrong "
-                    "when I tried to listen to it~ Let them know!]"
-                )
+                    "when I tried to listen to it~ Let them know!]")
+
 
         if enriched_parts:
             prefix = "\n\n".join(enriched_parts)

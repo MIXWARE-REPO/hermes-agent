@@ -8,6 +8,8 @@ description: "Catalog of bundled skills that ship with Hermes Agent"
 
 Hermes ships with a large built-in skill library copied into `~/.hermes/skills/` on install. This page catalogs the bundled skills that live in the repository under `skills/`.
 
+For governance and profiling, each skill should also be interpreted through the [Skills Taxonomy](/docs/reference/skills-taxonomy): frontend, services, or backend.
+
 ## apple
 
 Apple/macOS-specific skills — iMessage, Reminders, Notes, FindMy, and macOS automation. These skills only load on macOS systems.
@@ -60,16 +62,14 @@ DevOps and infrastructure automation skills.
 
 | Skill | Description | Path |
 |-------|-------------|------|
-| `dogfood` | Systematic exploratory QA testing of web applications — find bugs, capture evidence, and generate structured reports. | `dogfood/dogfood` |
+| `dogfood` | Systematic exploratory QA testing of web applications — absorbed into Handler Web as a reusable QA utility for browsing, evidence capture, and reporting. | `dogfood/dogfood` |
 | `hermes-agent-setup` | Help users configure Hermes Agent — CLI usage, setup wizard, model/provider selection, tools, skills, voice/STT/TTS, gateway, and troubleshooting. | `dogfood/hermes-agent-setup` |
 
 ## email
 
 Skills for sending, receiving, searching, and managing email from the terminal.
 
-| Skill | Description | Path |
-|-------|-------------|------|
-| `himalaya` | CLI to manage emails via IMAP/SMTP. Use himalaya to list, read, write, reply, forward, search, and organize emails from the terminal. Supports multiple accounts and message composition with MML (MIME Meta Language). | `email/himalaya` |
+This area is intentionally governed by the current mail stack and deployment-specific workflows rather than a legacy terminal mail CLI reference.
 
 ## gaming
 

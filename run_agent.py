@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 import os
 import random
 import re
+import subprocess
 import sys
 import tempfile
 import time
@@ -915,6 +916,7 @@ class AIAgent:
             self._fallback_chain = []
         self._fallback_index = 0
         self._fallback_activated = False
+        self._rearme_standby_launched = False
         # Legacy attribute kept for backward compat (tests, external callers)
         self._fallback_model = self._fallback_chain[0] if self._fallback_chain else None
         if self._fallback_chain and not self.quiet_mode:
@@ -2587,6 +2589,29 @@ class AIAgent:
         if tool_guidance:
             prompt_parts.append(" ".join(tool_guidance))
 
+        # Telegram-only conversation gate: first classify the turn as analysis
+        # / planning / mixed / execution before any proactive skill execution.
+        # This prevents the agent from defaulting to execution when the user is
+        # still shaping strategy in Telegram.
+        if (self.platform or "").strip().lower() == "telegram":
+            telegram_gate = (
+                "# Telegram conversation gate\n"
+                "Before responding, classify the turn into one of these modes: "
+                "analysis, planning, mixed, or execution.\n"
+                "The gateway will inject a per-turn routing flag into the base prompt "
+                "with these fields: input_channel, interaction_route, llm_positioning, and voice_trigger.\n"
+                "Rules:\n"
+                "- If the user is still exploring, debating, or defining strategy, "
+                "stay in analysis/planning mode and do not execute skills.\n"
+                "- If the request is clearly operational and complete, use execution mode.\n"
+                "- If the request is ambiguous, preserve exploration and ask for the "
+                "missing clarification instead of executing prematurely.\n"
+                "- This gate is only active on Telegram.\n"
+                "- The selected mode must influence both the depth of the answer and "
+                "whether any tools/skills are invoked.\n"
+            )
+            prompt_parts.append(telegram_gate)
+
         # Tool-use enforcement: tells the model to actually call tools instead
         # of describing intended actions.  Controlled by config.yaml
         # agent.tool_use_enforcement:
@@ -3593,14 +3618,45 @@ class AIAgent:
         self._reasoning_deltas_fired = False
         for attempt in range(max_stream_retries + 1):
             try:
+                # Accumulate output items from stream events in case the
+                # final response.completed event returns an empty output
+                # list (observed with the ChatGPT Codex backend).
+                _accumulated_output_items = []
+                _accumulated_text_parts = []  # text deltas for current output item
+                _current_fn_call = {}  # in-progress function_call fields
+
                 with active_client.responses.stream(**api_kwargs) as stream:
                     for event in stream:
                         if self._interrupt_requested:
                             break
                         event_type = getattr(event, "type", "")
+
+                        # -- track output items for backfill --
+                        if event_type == "response.output_item.added":
+                            # New output item starting — flush any prior text
+                            _accumulated_text_parts = []
+                            _current_fn_call = {}
+                        elif event_type == "response.output_item.done":
+                            item = getattr(event, "item", None)
+                            if item is not None:
+                                _accumulated_output_items.append(item)
+                            elif _accumulated_text_parts:
+                                # Build a synthetic message output item
+                                from types import SimpleNamespace
+                                _text = "".join(_accumulated_text_parts)
+                                _content_part = SimpleNamespace(type="output_text", text=_text)
+                                _synth = SimpleNamespace(
+                                    type="message", role="assistant",
+                                    content=[_content_part],
+                                )
+                                _accumulated_output_items.append(_synth)
+                            _accumulated_text_parts = []
+
                         # Fire callbacks on text content deltas (suppress during tool calls)
                         if "output_text.delta" in event_type or event_type == "response.output_text.delta":
                             delta_text = getattr(event, "delta", "")
+                            if delta_text:
+                                _accumulated_text_parts.append(delta_text)
                             if delta_text and not has_tool_calls:
                                 if not first_delta_fired:
                                     first_delta_fired = True
@@ -3618,7 +3674,30 @@ class AIAgent:
                             reasoning_text = getattr(event, "delta", "")
                             if reasoning_text:
                                 self._fire_reasoning_delta(reasoning_text)
-                    return stream.get_final_response()
+
+                    final_response = stream.get_final_response()
+
+                    # Backfill: if the final response has an empty output
+                    # but we accumulated items from stream events, patch it.
+                    final_output = getattr(final_response, "output", None)
+                    if (not final_output or (isinstance(final_output, list) and len(final_output) == 0)) and _accumulated_output_items:
+                        logger.debug(
+                            "Codex stream final response had empty output; "
+                            "backfilling with %d accumulated items. %s",
+                            len(_accumulated_output_items),
+                            self._client_log_context(),
+                        )
+                        try:
+                            final_response.output = _accumulated_output_items
+                        except (AttributeError, TypeError):
+                            # Frozen / immutable response object — wrap it
+                            from types import SimpleNamespace
+                            final_response = SimpleNamespace(
+                                **{k: v for k, v in vars(final_response).items()},
+                                output=_accumulated_output_items,
+                            )
+
+                    return final_response
             except (_httpx.RemoteProtocolError, _httpx.ReadTimeout, _httpx.ConnectError, ConnectionError) as exc:
                 if attempt < max_stream_retries:
                     logger.debug(
@@ -3631,6 +3710,33 @@ class AIAgent:
                     continue
                 logger.debug(
                     "Codex Responses stream transport failed; falling back to create(stream=True). %s error=%s",
+                    self._client_log_context(),
+                    exc,
+                )
+                return self._run_codex_create_stream_fallback(api_kwargs, client=active_client)
+            except TypeError as exc:
+                # OpenAI SDK raises TypeError("'NoneType' object is not iterable")
+                # when the ChatGPT Codex backend sends response.completed with
+                # output=None.  If we accumulated output items from stream events,
+                # reconstruct the final response from them and return it.
+                err_text = str(exc)
+                none_iterable = "nonetype" in err_text.lower() or "is not iterable" in err_text.lower()
+                if none_iterable and _accumulated_output_items:
+                    logger.debug(
+                        "Codex stream TypeError (output=None in response.completed); "
+                        "recovering with %d accumulated items. %s error=%s",
+                        len(_accumulated_output_items),
+                        self._client_log_context(),
+                        exc,
+                    )
+                    from types import SimpleNamespace
+                    return SimpleNamespace(
+                        output=_accumulated_output_items,
+                        status="completed",
+                        error=None,
+                    )
+                logger.debug(
+                    "Codex Responses stream TypeError; falling back to create(stream=True). %s error=%s",
                     self._client_log_context(),
                     exc,
                 )
@@ -3669,11 +3775,39 @@ class AIAgent:
             return stream_or_response
 
         terminal_response = None
+        _accumulated_output_items = []
+        _accumulated_text_parts = []
         try:
             for event in stream_or_response:
                 event_type = getattr(event, "type", None)
                 if not event_type and isinstance(event, dict):
                     event_type = event.get("type")
+
+                # Accumulate output items for backfill (ChatGPT Codex backend
+                # may return empty output in response.completed).
+                if event_type == "response.output_item.added":
+                    _accumulated_text_parts = []
+                elif event_type == "response.output_item.done":
+                    item = getattr(event, "item", None)
+                    if item is None and isinstance(event, dict):
+                        item = event.get("item")
+                    if item is not None:
+                        _accumulated_output_items.append(item)
+                    elif _accumulated_text_parts:
+                        from types import SimpleNamespace
+                        _text = "".join(_accumulated_text_parts)
+                        _content_part = SimpleNamespace(type="output_text", text=_text)
+                        _accumulated_output_items.append(
+                            SimpleNamespace(type="message", role="assistant", content=[_content_part])
+                        )
+                    _accumulated_text_parts = []
+                elif event_type in ("response.output_text.delta",) or (event_type and "output_text.delta" in event_type):
+                    delta = getattr(event, "delta", None)
+                    if delta is None and isinstance(event, dict):
+                        delta = event.get("delta", "")
+                    if delta:
+                        _accumulated_text_parts.append(delta)
+
                 if event_type not in {"response.completed", "response.incomplete", "response.failed"}:
                     continue
 
@@ -3681,6 +3815,17 @@ class AIAgent:
                 if terminal_response is None and isinstance(event, dict):
                     terminal_response = event.get("response")
                 if terminal_response is not None:
+                    # Backfill empty output
+                    t_output = getattr(terminal_response, "output", None)
+                    if (not t_output or (isinstance(t_output, list) and len(t_output) == 0)) and _accumulated_output_items:
+                        try:
+                            terminal_response.output = _accumulated_output_items
+                        except (AttributeError, TypeError):
+                            from types import SimpleNamespace
+                            terminal_response = SimpleNamespace(
+                                **{k: v for k, v in vars(terminal_response).items()},
+                                output=_accumulated_output_items,
+                            )
                     return terminal_response
         finally:
             close_fn = getattr(stream_or_response, "close", None)
@@ -4466,6 +4611,33 @@ class AIAgent:
 
     # ── Provider fallback ──────────────────────────────────────────────────
 
+    def _launch_rearme_standby(self) -> None:
+        """Start the standby rearme script once per agent session.
+
+        This is intentionally best-effort and non-blocking: if the standby
+        helper cannot be launched, we keep the fallback flow moving.
+        """
+        if self._rearme_standby_launched:
+            return
+        self._rearme_standby_launched = True
+
+        try:
+            standby_script = Path(__file__).resolve().parent / "scripts" / "hermes_reconnect_standby.py"
+            if not standby_script.exists():
+                logger.warning("Rearme standby script not found at %s", standby_script)
+                return
+            subprocess.Popen(
+                [sys.executable, str(standby_script), "--output", "/tmp/hermes_reconnect_standby.json"],
+                cwd=str(Path(__file__).resolve().parent),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+            self._emit_status("🧰 Rearme standby launched after primary failure")
+        except Exception:
+            logger.debug("Failed to launch rearme standby", exc_info=True)
+
     def _try_activate_fallback(self) -> bool:
         """Switch to the next fallback model/provider in the chain.
 
@@ -4478,6 +4650,7 @@ class AIAgent:
         auth resolution and client construction — no duplicated provider→key
         mappings.
         """
+        self._launch_rearme_standby()
         if self._fallback_index >= len(self._fallback_chain):
             return False
 
@@ -4761,6 +4934,8 @@ class AIAgent:
                 "models.github.ai" in self.base_url.lower()
                 or "api.githubcopilot.com" in self.base_url.lower()
             )
+            # ChatGPT Codex backend rejects max_output_tokens (unsupported parameter)
+            is_chatgpt_codex = "chatgpt.com" in self.base_url.lower()
 
             # Resolve reasoning effort: config > default (medium)
             reasoning_effort = "medium"
@@ -4798,7 +4973,8 @@ class AIAgent:
             elif not is_github_responses:
                 kwargs["include"] = []
 
-            if self.max_tokens is not None:
+            # ChatGPT Codex backend doesn't support max_output_tokens
+            if self.max_tokens is not None and not is_chatgpt_codex:
                 kwargs["max_output_tokens"] = self.max_tokens
 
             return kwargs

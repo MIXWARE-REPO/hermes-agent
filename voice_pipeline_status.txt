@@ -1,0 +1,65 @@
+Estado actual del trabajo: pipeline de voz Telegram / Hermes
+
+Fecha: 2026-06-03
+
+Objetivo
+- Conseguir que cuando llegue una nota de voz o audio por Telegram, la respuesta salga también en audio/voz y no en texto.
+- Evitar el fallback textual para Telegram cuando la entrada es voz/audio, salvo fallo real del backend de voz.
+- Confirmar si el problema venía del código o de una instancia vieja del proceso.
+
+Qué se hizo
+1) Se revisó la generación de audio TTS
+- Se detectó que OpenVoice estaba generando OGG Vorbis en lugar de OGG Opus.
+- Se corrigió la ruta de TTS para forzar recodificación a Opus cuando la salida es para Telegram.
+- Se validó el archivo generado con `file` y quedó como:
+  - Ogg data, Opus audio
+
+2) Se endureció la trazabilidad del envío de voz
+- En `gateway/platforms/telegram.py` se añadieron logs explícitos de éxito:
+  - `Telegram voice sent OK (voice bubble)`
+  - `Telegram audio sent OK (audio file)`
+- En `gateway/platforms/base.py` se añadió un log de alto nivel:
+  - `VOICE PIPELINE OK`
+  - y su contraparte de fallo:
+  - `VOICE PIPELINE FAILED`
+
+3) Se corrigió la detección de entrada de voz/audio
+- En `gateway/run.py` se cambió la lógica para tratar ambos casos igual:
+  - `MessageType.VOICE`
+  - `MessageType.AUDIO`
+- También se corrigió el contexto de voz para que `input_channel` se marque como `voice` cuando la entrada sea audio/voz.
+
+4) Se bloqueó la salida textual para Telegram voice/audio
+- Se endureció la ruta del runner para que, si la entrada es voz/audio de Telegram, no devuelva el texto como fallback en esa misma respuesta.
+- Se endureció también la base para no enviar texto cuando la plataforma es Telegram y la entrada es voz/audio.
+- La intención es que Telegram voz/audio implique salida de voz, no texto.
+
+5) Se inspeccionó si el problema podía venir de una instancia vieja
+- Se listaron procesos y apareció una instancia activa:
+  - `.venv/bin/python -m hermes_cli.main gateway run --replace`
+  - PID visto: 3836139
+  - cwd: `/home/laia/hermes-agent`
+- Eso encaja con el síntoma de que el código cambiado no se estaba reflejando todavía.
+
+Dónde nos quedamos
+- Se intentó parar la instancia vieja para relanzar el gateway actualizado.
+- El `kill 3836139` no se completó en esa llamada porque llegó un nuevo mensaje del usuario y el comando quedó interrumpido.
+- El siguiente paso correcto es:
+  1. parar la instancia vieja del gateway
+  2. relanzar el gateway con el código actualizado
+  3. comprobar en logs que la respuesta a una nota de voz entra por la ruta de voz y no por texto
+
+Estado técnico actual esperado
+- El código está parcheado para forzar voz en Telegram voice/audio.
+- Falta confirmar el proceso en ejecución: si sigue corriendo una instancia vieja, no verán los cambios.
+
+Archivos tocados
+- /home/laia/hermes-agent/tools/tts_tool.py
+- /home/laia/hermes-agent/gateway/platforms/base.py
+- /home/laia/hermes-agent/gateway/platforms/telegram.py
+- /home/laia/hermes-agent/gateway/run.py
+
+Notas importantes
+- El archivo de audio de prueba generado ya salió como Opus, así que el backend de generación de voz no era el único problema.
+- El síntoma principal ahora apunta a ejecución / despliegue / instancia vieja del gateway.
+- El objetivo operativo sigue siendo: audio entra -> audio sale, sin texto visible como respuesta final.

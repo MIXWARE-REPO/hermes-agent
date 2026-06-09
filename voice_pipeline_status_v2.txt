@@ -1,0 +1,158 @@
+MAPA OPERATIVO ACTUAL — GATE DE 2 CAMINOS + ARQUITECTURA DE VOZ + TRIGGER
+
+Fecha: 2026-06-03
+
+1) Qué estamos haciendo
+
+Estamos cerrando y dejando rígido el pipeline de voz de Telegram para que cumpla esta regla operativa:
+- si entra audio o nota de voz, la respuesta debe salir por voz
+- no debe aparecer texto como respuesta visible si la entrega de voz es válida
+- si la entrega de voz falla de verdad, el sistema debe fallar de forma explícita, no ocultarse detrás de texto
+
+Además, el comportamiento debe quedar gobernado por dos capas:
+- un gate de 2 caminos para el modo de conversación
+- una arquitectura de voz de 4 etapas para el procesamiento y entrega
+
+2) Gate de 2 caminos
+
+El gate de conversación tiene solo dos caminos activos:
+
+A. Camino ANALÍTICO
+- sirve para pensar, explorar, consultar, contrastar y ampliar contexto
+- la voz debe sonar más calmada, explicativa y consultiva
+- se usa cuando el usuario todavía no está pidiendo ejecutar una acción concreta
+
+B. Camino EJECUTIVO
+- sirve para actuar, aplicar, operar, cerrar o ejecutar una decisión
+- la voz debe sonar más directa, corta y orientada a acción
+- se usa cuando el usuario ya pidió ejecutar algo concreto
+
+Regla importante:
+- el gate es sticky por tema
+- no debe cambiar por una frase aislada si el tema sigue siendo el mismo
+- el cambio de camino debe producirse solo cuando el usuario cambie de intención de forma explícita o cambie de tema
+
+Campos que viajan en el contexto del gate:
+- session_route
+- route_reason
+- topic_epoch
+- input_channel
+- interaction_route
+- llm_positioning
+- voice_trigger
+
+Lectura práctica:
+- input_channel = voice o text
+- interaction_route = analysis o execution
+- voice_trigger = true cuando la entrada llega como voz/audio en Telegram
+
+3) Trigger de voz
+
+El trigger correcto no es el contenido, sino el formato de entrada.
+
+Regla:
+- si Telegram recibe VOICE o AUDIO, eso debe disparar la ruta de voz
+- no hace falta un toggle manual /voice para activar la respuesta hablada en ese caso
+
+O sea:
+- entrada por formato => salida por voz
+- texto normal => puede seguir en texto
+
+Esto es importante porque la activación debe depender del medio, no de la intención textual del mensaje.
+
+4) Arquitectura de voz en 4 etapas
+
+La arquitectura de voz se organiza en 4 etapas rígidas:
+
+ETAPA 1 — Detección + contrato de entrada
+- se detecta que el mensaje es audio o nota de voz
+- se construye el contexto de ruta
+- se decide si el tema va por análisis o ejecución
+- se prepara el payload hacia el orquestador
+
+ETAPA 2 — Limpieza y control del texto
+- se limpia el texto útil que irá a voz
+- se quitan residuos que no deben leerse
+- se controla que el contenido final sea apto para speech
+- se aplica el contrato de salida, evitando texto basura o cierres raros
+
+ETAPA 3 — Render de voz
+- OpenVoice genera el audio
+- se aplica el perfil de voz
+- se validan los segmentos y el formato
+- si el archivo no es válido, se considera fallo real
+
+ETAPA 4 — Entrega al usuario
+- si es Telegram, se entrega como nota de voz en Opus/OGG
+- si la entrega se confirma, el sistema marca éxito
+- si no se puede verificar, no se finge el éxito
+
+5) Qué se corrigió en el código
+
+Se corrigieron varias capas para que el flujo no vuelva a caer a texto por accidente:
+
+- OpenVoice se validó como salida real Opus, no solo OGG de extensión
+- el gateway trata VOICE y AUDIO como equivalentes para el routing
+- se bloqueó la devolución de texto cuando la entrada es voz/audio en Telegram
+- se añadieron logs explícitos de éxito y fallo de la pipeline
+- se revisó que una instancia vieja del gateway podía estar impidiendo ver los cambios
+
+6) Dónde nos quedamos
+
+Detectamos que había una instancia vieja todavía ejecutándose:
+- `.venv/bin/python -m hermes_cli.main gateway run --replace`
+- PID visto: 3836139
+
+Eso explicaba por qué, aunque el código estaba parcheado, el comportamiento en vivo seguía igual.
+
+El paso pendiente es:
+1. parar la instancia vieja
+2. relanzar el gateway con el código actualizado
+3. verificar en logs que la respuesta a voz entra por la ruta de voz y no por texto
+
+7) Rutas exactas de archivos .py implicados
+
+Código principal del gate y la orquestación:
+- /home/laia/hermes-agent/run_agent.py
+- /home/laia/hermes-agent/gateway/run.py
+- /home/laia/hermes-agent/gateway/platforms/base.py
+- /home/laia/hermes-agent/gateway/platforms/telegram.py
+- /home/laia/hermes-agent/tools/voice_orchestrator.py
+- /home/laia/hermes-agent/tools/tts_tool.py
+
+8) Skills activos o usados en este trabajo
+
+Skill de voz rígida:
+- /home/laia/.hermes/skills/productivity/voice-orchestrator-rigid-production/SKILL.md
+
+Skill de estilo de email Grid Code:
+- /home/laia/.hermes/skills/email-style-grid-code/SKILL.md
+
+9) Qué hace cada skill en este contexto
+
+voice-orchestrator-rigid-production
+- define el contrato estricto de la arquitectura de voz
+- obliga a usar Python como fuente de verdad
+- fuerza fallback a texto solo si la voz no se puede validar
+- define el baseline de OpenVoice y la separación gate/trigger/render/entrega
+
+email-style-grid-code
+- no participa en la voz
+- solo aplica si hay que redactar emails de cliente Grid Code
+- se incluye aquí porque está activo en el entorno, pero no forma parte del pipeline de voz
+
+10) Resumen corto para retomar
+
+- El diseño lógico ya está corregido para tratar Telegram voice/audio como voz real.
+- El problema que quedaba parecía ser una instancia vieja del gateway todavía levantada.
+- El siguiente paso operativo es reiniciar esa instancia para que cargue el código actualizado.
+
+11) Resultado esperado final
+
+Cuando todo esté bien:
+- entra audio por Telegram
+- se clasifica como voice/audio
+- se aplica el gate de 2 caminos
+- se genera voz con OpenVoice
+- se entrega como nota de voz Opus
+- no aparece texto visible como fallback normal

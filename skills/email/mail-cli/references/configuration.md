@@ -1,6 +1,6 @@
-# Himalaya Configuration Reference
+# Mail CLI Configuration Reference
 
-Configuration file location: `~/.config/himalaya/config.toml`
+Configuration file location: `~/.config/mail-cli/config.toml`
 
 ## Minimal IMAP + SMTP Setup
 
@@ -50,7 +50,7 @@ backend.auth.cmd = "pass show email/imap"
 backend.auth.keyring = "imap-example"
 ```
 
-Then run `himalaya account configure <account>` to store the password.
+Then run `mail-cli account configure <account>` to store the password.
 
 ## Gmail Configuration
 
@@ -133,7 +133,7 @@ email = "work@company.com"
 Switch accounts with `--account`:
 
 ```bash
-himalaya --account work envelope list
+mail-cli --account work envelope list
 ```
 
 ## Notmuch Backend (local mail)
@@ -172,7 +172,7 @@ signature-delim = "-- \n"
 
 ```toml
 [accounts.default]
-downloads-dir = "~/Downloads/himalaya"
+downloads-dir = "~/Downloads/mail-cli"
 ```
 
 ### Editor for composing

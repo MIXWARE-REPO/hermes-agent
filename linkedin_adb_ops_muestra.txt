@@ -1,0 +1,49 @@
+DOCUMENTO DE MUESTRA
+LinkedIn por ADB — Script operativo
+
+Archivo script:
+/home/laia/hermes-agent/linkedin_adb_ops.py
+
+Descripción:
+Script en Python para operar LinkedIn desde Android vía ADB.
+Incluye:
+- Check de conexión ADB y foco de LinkedIn
+- Envío de solicitudes de conexión
+- Envío de DM
+- Publicación de post de texto
+- Publicación de post con foto
+
+Requisitos mínimos:
+1) ADB instalado en el equipo
+2) Teléfono Android conectado y autorizado
+3) App LinkedIn instalada en el móvil
+4) Sesión iniciada en LinkedIn
+
+Comandos de uso:
+
+1) Validar ADB + LinkedIn
+python3 /home/laia/hermes-agent/linkedin_adb_ops.py check
+
+2) Enviar solicitud de conexión
+python3 /home/laia/hermes-agent/linkedin_adb_ops.py connect --profile-url "https://www.linkedin.com/in/usuario"
+
+3) Enviar DM
+python3 /home/laia/hermes-agent/linkedin_adb_ops.py dm --url "https://www.linkedin.com/in/usuario" --text "Buenas, gracias por tu tiempo."
+
+4) Publicar texto
+python3 /home/laia/hermes-agent/linkedin_adb_ops.py post-text --message "Texto del post"
+
+5) Publicar texto con arrobas (menciones)
+python3 /home/laia/hermes-agent/linkedin_adb_ops.py post-text --message "Gracias por acompañar este proceso" --mention "Dario Gomez Fernandez" --mention "GRID CODE"
+
+6) Publicar foto + texto
+python3 /home/laia/hermes-agent/linkedin_adb_ops.py post-photo --message "Resumen de avances de hoy."
+
+Notas operativas:
+- El script usa pausas aleatorias para simular ritmo humano.
+- Si detecta bloqueo Premium/InMail en DM, corta con error controlado.
+- En algunos móviles, LinkedIn cambia botones según idioma/versión; puede requerir ajuste fino.
+
+Estado:
+- Script creado y validado en help.
+- Listo para pruebas de campo con dispositivo real.

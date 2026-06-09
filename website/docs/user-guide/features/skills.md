@@ -16,6 +16,20 @@ See also:
 
 - [Bundled Skills Catalog](/docs/reference/skills-catalog)
 - [Official Optional Skills Catalog](/docs/reference/optional-skills-catalog)
+- [Skills Taxonomy](/docs/reference/skills-taxonomy)
+- [Los 40 Principales](/docs/reference/forty-principals)
+- [Skills Profile Index](/docs/reference/skills-profile-index)
+- [Collision Audit](/docs/reference/collision-audit)
+
+## Skills Taxonomy
+
+Hermes profiles every skill with one primary layer:
+
+- Frontend: user-facing capabilities that create a visible outcome or action.
+- Services: reusable enablers that frontend skills consume to finish the job.
+- Backend: hidden operational machinery for transport, auth, persistence, and scheduling.
+
+This matters because a skill can be technically complex without being user-visible. The taxonomy keeps the public surface small while still allowing the agent to reuse internal capabilities.
 
 ## Using Skills
 

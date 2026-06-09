@@ -53,6 +53,27 @@ voice = [
   "sounddevice>=0.4.6,<1",
   "numpy>=1.24.0,<3",
 ]
+tts-openvoice = [
+  # OpenVoice runtime for production TTS. We keep MeloTTS optional here
+  # because the default base provider is Edge; the core OpenVoice renderer
+  # itself works with the bundled checkpoints, torch, and ffmpeg fallback.
+  "torch>=2.12.0,<3",
+  "soundfile>=0.13.1,<1",
+  "librosa>=0.11.0,<1",
+  "pydub>=0.25.1,<1",
+  "inflect>=7.5.0,<8",
+  "unidecode>=1.4.0,<2",
+  "pypinyin>=0.55.0,<1",
+  "cn2an>=0.5.24,<1",
+  "jieba>=0.42.1,<1",
+  "langid>=1.1.6,<2",
+  "eng_to_ipa>=0.0.2,<1",
+  "whisper-timestamped>=1.15.9,<2",
+  "faster-whisper>=1.2.1,<2",
+  "wavmark>=0.0.3,<1",
+  "imageio-ffmpeg>=0.6.0,<1",
+  "MyShell-OpenVoice @ git+https://github.com/myshell-ai/OpenVoice.git",
+]
 pty = [
   "ptyprocess>=0.7.0,<1; sys_platform != 'win32'",
   "pywinpty>=2.0.0,<3; sys_platform == 'win32'",
@@ -89,6 +110,7 @@ all = [
   "hermes-agent[sms]",
   "hermes-agent[acp]",
   "hermes-agent[voice]",
+  "hermes-agent[tts-openvoice]",
   "hermes-agent[dingtalk]",
   "hermes-agent[feishu]",
 ]
