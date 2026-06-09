@@ -359,6 +359,14 @@ hermes skills install official/<category>/<skill>
 |-------|-------------|------|
 | `telephony` | Give Hermes phone capabilities — provision and persist a Twilio number, send and receive SMS/MMS, make direct calls, and place AI-driven outbound calls through Bland.ai or Vapi. | `productivity/telephony` |
 
+## gridcode
+
+Custom production skills for applying the Grid Code document style canon to any document family.
+
+| Skill | Description | Path |
+|-------|-------------|------|
+| `gridcodear-documentos` | Canonical Grid Code skill for converting technical, administrative, or commercial documents into production PDFs with running header/footer, dynamic institutional author, and T/A/C naming. | `docs/reference/gridcodear-documentos.md` |
+
 ## research
 
 | Skill | Description | Path |
