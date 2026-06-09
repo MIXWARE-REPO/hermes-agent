@@ -15,7 +15,7 @@ Rule: one user intent should resolve to one canonical skill. Everything else sho
 | Family | Canonical skill | Collisions / helpers | Decision |
 |---|---|---|---|
 | Preliminary analysis reports | `gridcode-preliminary-analysis-report` | `gridcode-preliminary-report-a4-lite` | Keep canonical; lite becomes preset/alias |
-| PDF rendering | `pdf-builder` | `nano-pdf`, `pdf-overlay-hotfix` | Keep canonical; helpers stay internal |
+| Grid Code PDF documents | `gridcodear-documentos` | `pdf-builder`, `nano-pdf`, `pdf-overlay-hotfix` | Keep `gridcodear-documentos` canonical; `pdf-builder` is now generic/non-Grid-Code |
 | Remote OCPP analysis | `gridcode-aggregated-behavior-remote-analysis` | `ocpp-log-unpack-7d-analysis` | Keep canonical; unpacking becomes helper |
 | Webasto endpoint operations | `webasto-full-production-run` / `webasto-unite-log-analysis-production-report` | `webasto-set-ocpp-endpoint`, `webasto-verify-ocpp-persistence` | Keep user-facing flows canonical; endpoint ops stay backend helpers |
 | LinkedIn workflow | `linkedin-li-preset-v1` | `linkedin-message-standard-v1`, `linkedin-posting-random-window-v1`, `linkedin-trend-intensity-3w` | Keep preset canonical; the others become service helpers |

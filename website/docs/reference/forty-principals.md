@@ -49,7 +49,7 @@ A skill can change layer over time, but it should keep one primary layer at any 
 | 28 | `telephony` | Frontend | User-facing | SMS / calls / telephony actions | Canonical |
 | 29 | `google-workspace` | Services | Hidden | Workspace API bridge for Drive / Calendar / Docs / Sheets | Canonical |
 | 30 | `mail-imap-only-lock` | Backend | Hidden | IMAP / SMTP transport and locking | Canonical |
-| 31 | `pdf-builder` | Services | Hidden | General PDF rendering and document factory | Canonical |
+| 31 | `gridcodear-documentos` | Services | Hidden | Canonical Grid Code document factory for technical, administrative, and commercial PDFs | Canonical |
 | 32 | `nano-pdf` | Services | Hidden | PDF micro-edits and lightweight transforms | Helper |
 | 33 | `pdf-overlay-hotfix` | Services | Hidden | Quick PDF correction and overlay operations | Helper |
 | 34 | `ocpp-log-unpack-7d-analysis` | Services | Hidden | OCPP log unpacking helper | Helper |

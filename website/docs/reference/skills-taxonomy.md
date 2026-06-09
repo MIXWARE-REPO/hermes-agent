@@ -101,7 +101,7 @@ This is the current first-pass profile for the most important skills in the acti
 | `gridcode-technical-service-report-pdf` | Frontend | User-facing | Technical service report generation | Canonical |
 | `gridcode-preliminary-analysis-report` | Frontend | User-facing | Preliminary analysis report generation | Canonical |
 | `gridcode-preliminary-report-a4-lite` | Frontend | User-facing | Lightweight preset of preliminary analysis | Alias / preset |
-| `pdf-builder` | Services | Hidden | General PDF rendering and document factory | Canonical |
+| `gridcodear-documentos` | Services | Hidden | Canonical Grid Code document factory for technical, administrative, and commercial PDFs | Canonical |
 | `onsite-mobile-pdf-form-design` | Frontend | User-facing | Editable onsite form generation | Canonical |
 | `nano-pdf` | Services | Hidden | PDF micro-edits and lightweight transforms | Helper |
 | `pdf-overlay-hotfix` | Services | Hidden | Quick PDF correction / overlay operations | Helper |
